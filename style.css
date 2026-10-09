@@ -722,8 +722,32 @@ body {
   }
 }
 
+/* Letakkan ini di baris paling akhir style.css */
+
+/* Footer Credit */
+.app-footer {
+  text-align: center;
+  padding: 1.5rem 1rem;
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.app-footer a {
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 700;
+  transition: opacity 0.2s ease;
+}
+
+.app-footer a:hover {
+  opacity: 0.8;
+  text-decoration: underline;
+}
+
+/* Timpa blok @media print lama dengan yang ini (ada tambahan .app-footer) */
 @media print {
-  .header-actions, .toolbar, .btn, .admin-mode-banner, .toast-container {
+  .header-actions, .toolbar, .btn, .admin-mode-banner, .toast-container, .app-footer {
     display: none !important;
   }
   body { background: #fff; color: #000; }
