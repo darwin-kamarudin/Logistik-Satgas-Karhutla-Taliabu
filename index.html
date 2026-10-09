@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistem Logistik Posko Satgas Karhutla Kab. Pulau Taliabu</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📦</text></svg>">
+</head>
+<body>
+
+  <!-- Top Header -->
+  <header class="header">
+    <div class="container header-content">
+      <div class="brand-wrapper">
+        <div class="brand-icon">📦</div>
+        <div>
+          <h1 class="brand-title">DAFTAR PERSEDIAAN BARANG LOGISTIK</h1>
+          <p class="brand-subtitle">Posko Utama SATGAS KARHUTLA &bull; Pemda Kabupaten Pulau Taliabu</p>
+          <span class="brand-tag">Transparansi Penyaluran Logistik Publik</span>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <div id="connectionStatus" class="status-pill status-demo">
+          <span class="status-dot"></span>
+          <span id="connectionStatusText">Mode Demo (Lokal)</span>
+        </div>
+        <button id="btnRefresh" class="btn btn-outline-white btn-sm" title="Muat Ulang Data">
+          🔄 Segarkan
+        </button>
+        <button id="btnViewLogs" class="btn btn-outline-white btn-sm" title="Lihat Riwayat Transaksi">
+          📋 Riwayat
+        </button>
+        <button id="btnAdminToggle" class="btn btn-primary btn-sm">
+          🔒 Mode Petugas
+        </button>
+        <button id="btnSettings" class="btn btn-outline-white btn-sm" title="Pengaturan URL Google Apps Script">
+          ⚙️ Setup API
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Admin Active Banner -->
+  <div id="adminBanner" class="admin-mode-banner">
+    <div class="container" style="display:flex; justify-content:space-between; align-items:center; width:100%; padding:0;">
+      <div class="admin-banner-text">
+        <span>🛡️</span>
+        <span><strong>Mode Petugas Aktif:</strong> Anda dapat menginput barang masuk/keluar, menambah item, dan mengoreksi data stok.</span>
+      </div>
+      <button id="btnLogoutAdmin" class="btn btn-outline btn-sm" style="background:#fff;">Keluar Mode Petugas</button>
+    </div>
+  </div>
+
+  <main class="container">
+    
+    <!-- KPI Summary Cards -->
+    <section class="stats-grid">
+      <div class="stat-card card-blue">
+        <div class="stat-header">
+          <span class="stat-label">Total Jenis Barang</span>
+          <span class="stat-icon">🏷️</span>
+        </div>
+        <div id="statTotalItems" class="stat-value">0</div>
+        <div class="stat-sub">Item terdaftar di posko</div>
+      </div>
+
+      <div class="stat-card card-green">
+        <div class="stat-header">
+          <span class="stat-label">Total Stok Masuk</span>
+          <span class="stat-icon">📥</span>
+        </div>
+        <div id="statTotalMasuk" class="stat-value">0</div>
+        <div class="stat-sub">Akumulasi penerimaan</div>
+      </div>
+
+      <div class="stat-card card-orange">
+        <div class="stat-header">
+          <span class="stat-label">Total Disalurkan</span>
+          <span class="stat-icon">📤</span>
+        </div>
+        <div id="statTotalKeluar" class="stat-value">0</div>
+        <div class="stat-sub">Barang keluar ke lapangan</div>
+      </div>
+
+      <div class="stat-card card-amber">
+        <div class="stat-header">
+          <span class="stat-label">Sisa Persediaan</span>
+          <span class="stat-icon">🏢</span>
+        </div>
+        <div id="statTotalSisa" class="stat-value">0</div>
+        <div class="stat-sub">Stok fisik di gudang</div>
+      </div>
+
+      <div class="stat-card card-red">
+        <div class="stat-header">
+          <span class="stat-label">Perhatian Stok</span>
+          <span class="stat-icon">⚠️</span>
+        </div>
+        <div id="statStokPerhatian" class="stat-value">0</div>
+        <div class="stat-sub" id="statStokPerhatianSub">0 Habis, 0 Menipis</div>
+      </div>
+    </section>
+
+    <!-- Main Table Card -->
+    <section class="dashboard-card">
+      
+      <!-- Toolbar Controls -->
+      <div class="toolbar">
+        <div class="toolbar-filters">
+          <div class="search-box">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="searchInput" class="search-input" placeholder="Cari nama barang atau satuan...">
+          </div>
+
+          <select id="filterStatus" class="select-filter">
+            <option value="ALL">Semua Status</option>
+            <option value="AVAILABLE">Tersedia (> 5)</option>
+            <option value="LOW">Menipis (1 - 5)</option>
+            <option value="EMPTY">Habis (0)</option>
+          </select>
+
+          <select id="filterSatuan" class="select-filter">
+            <option value="ALL">Semua Satuan</option>
+          </select>
+
+          <select id="sortOption" class="select-filter">
+            <option value="id_asc">Urutan No (1 - 47)</option>
+            <option value="name_asc">Nama Barang (A - Z)</option>
+            <option value="stock_desc">Sisa Stok Terbanyak</option>
+            <option value="stock_asc">Sisa Stok Paling Sedikit</option>
+            <option value="out_desc">Paling Banyak Disalurkan</option>
+          </select>
+        </div>
+
+        <div class="toolbar-actions">
+          <button id="btnTambahBarang" class="btn btn-primary" style="display:none;">
+            ➕ Tambah Barang
+          </button>
+          <button id="btnExportCsv" class="btn btn-outline" title="Download data sebagai CSV">
+            📥 Unduh CSV
+          </button>
+          <button id="btnPrint" class="btn btn-outline" title="Cetak daftar inventaris">
+            🖨️ Cetak
+          </button>
+        </div>
+      </div>
+
+      <!-- Data Table -->
+      <div class="table-responsive">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th class="col-num">No</th>
+              <th>Nama Barang</th>
+              <th style="text-align:right;">Masuk</th>
+              <th style="text-align:right;">Keluar</th>
+              <th style="text-align:right;">Persediaan Gudang</th>
+              <th>Satuan</th>
+              <th>Status</th>
+              <th id="thAction" style="display:none; text-align:center;">Aksi Petugas</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody">
+            <!-- Dynamic rows populated via app.js -->
+          </tbody>
+        </table>
+
+        <!-- Empty State Container -->
+        <div id="emptyState" class="empty-state" style="display:none;">
+          <div class="empty-icon">🔎</div>
+          <h3>Tidak ada barang yang cocok</h3>
+          <p>Coba gunakan kata kunci lain atau ubah filter pencarian Anda.</p>
+        </div>
+      </div>
+
+      <!-- Table Footer Summary -->
+      <div class="table-footer">
+        <div>
+          Menampilkan <strong id="lblShowingCount">0</strong> dari <strong id="lblTotalCount">0</strong> barang logistik
+        </div>
+        <div>
+          Terakhir sinkronisasi: <span id="lblLastSync">-</span>
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- ====================================================================== -->
+  <!-- MODAL WINDOWS                                                          -->
+  <!-- ====================================================================== -->
+
+  <!-- 1. Modal Transaksi Stok (Masuk / Keluar) -->
+  <div id="modalTransaksi" class="modal-backdrop">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 class="modal-title">📦 Catat Transaksi Mutasi Stok</h3>
+        <button class="modal-close" data-close="modalTransaksi">&times;</button>
+      </div>
+      <form id="formTransaksi">
+        <div class="modal-body">
+          <input type="hidden" id="transaksiItemId">
+
+          <div class="radio-cards">
+            <div class="radio-card">
+              <input type="radio" id="typeMasuk" name="transaksiJenis" value="MASUK" checked>
+              <label for="typeMasuk" class="radio-card-label type-masuk">
+                📥 BARANG MASUK
+              </label>
+            </div>
+            <div class="radio-card">
+              <input type="radio" id="typeKeluar" name="transaksiJenis" value="KELUAR">
+              <label for="typeKeluar" class="radio-card-label type-keluar">
+                📤 BARANG KELUAR
+              </label>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Nama Barang</label>
+            <input type="text" id="transaksiNama" class="form-control" readonly style="background:#f1f5f9; font-weight:700;">
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Sisa Saat Ini di Gudang</label>
+              <div id="transaksiSisaBadge" class="form-control" style="background:#f8fafc; font-weight:700;">0</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Jumlah Mutasi <span class="required">*</span></label>
+              <input type="number" id="transaksiJumlah" class="form-control" min="1" required placeholder="Contoh: 10">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Keterangan / Penerima / Sumber Donasi</label>
+            <input type="text" id="transaksiKeterangan" class="form-control" placeholder="Contoh: Penyaluran Tim Lapangan Regu 3 / Donasi Warga">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Nama Petugas Posko <span class="required">*</span></label>
+            <input type="text" id="transaksiPetugas" class="form-control" required placeholder="Nama Anda / Petugas Jaga">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" data-close="modalTransaksi">Batal</button>
+          <button type="submit" id="btnSubmitTransaksi" class="btn btn-primary">Simpan Transaksi</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 2. Modal Tambah Barang Baru -->
+  <div id="modalTambah" class="modal-backdrop">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 class="modal-title">➕ Tambah Barang Inventaris Baru</h3>
+        <button class="modal-close" data-close="modalTambah">&times;</button>
+      </div>
+      <form id="formTambah">
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">Nama Barang <span class="required">*</span></label>
+            <input type="text" id="tambahNama" class="form-control" required placeholder="Contoh: Sarden Kaleng 425g">
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Satuan Kemasan <span class="required">*</span></label>
+              <input type="text" id="tambahSatuan" class="form-control" required placeholder="Dos / Karung / Pak / Rak">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Stok Awal Masuk</label>
+              <input type="number" id="tambahStokAwal" class="form-control" min="0" value="0">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Keterangan Tambahan</label>
+            <input type="text" id="tambahKeterangan" class="form-control" placeholder="Sumber pengadaan / posko penyimpan">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" data-close="modalTambah">Batal</button>
+          <button type="submit" id="btnSubmitTambah" class="btn btn-primary">Tambahkan ke Gudang</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 3. Modal Edit Data Barang -->
+  <div id="modalEdit" class="modal-backdrop">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 class="modal-title">✏️ Koreksi / Edit Data Barang</h3>
+        <button class="modal-close" data-close="modalEdit">&times;</button>
+      </div>
+      <form id="formEdit">
+        <div class="modal-body">
+          <input type="hidden" id="editId">
+          <div class="form-group">
+            <label class="form-label">Nama Barang <span class="required">*</span></label>
+            <input type="text" id="editNama" class="form-control" required>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Satuan <span class="required">*</span></label>
+            <input type="text" id="editSatuan" class="form-control" required>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Akumulasi Masuk <span class="required">*</span></label>
+              <input type="number" id="editMasuk" class="form-control" min="0" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Akumulasi Keluar <span class="required">*</span></label>
+              <input type="number" id="editKeluar" class="form-control" min="0" required>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Alasan Koreksi / Catatan</label>
+            <input type="text" id="editKeterangan" class="form-control" placeholder="Penyelarasan stok opname fisik">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" data-close="modalEdit">Batal</button>
+          <button type="submit" id="btnSubmitEdit" class="btn btn-primary">Simpan Perubahan</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 4. Modal Login Petugas (PIN) -->
+  <div id="modalAdminLogin" class="modal-backdrop">
+    <div class="modal-dialog" style="max-width:380px;">
+      <div class="modal-header">
+        <h3 class="modal-title">🔒 Verifikasi Petugas Posko</h3>
+        <button class="modal-close" data-close="modalAdminLogin">&times;</button>
+      </div>
+      <form id="formAdminLogin">
+        <div class="modal-body">
+          <p style="color:var(--text-muted); margin-bottom:1rem;">
+            Dashboard ini terbuka untuk publik. Untuk melakukan perubahan stok, silakan masukkan PIN Petugas:
+          </p>
+          <div class="form-group">
+            <label class="form-label">PIN Petugas Posko</label>
+            <input type="password" id="adminPinInput" class="form-control" placeholder="Default: 1234" autofocus required>
+            <p class="form-hint">PIN default adalah <strong>1234</strong> (dapat diubah di Apps Script).</p>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" data-close="modalAdminLogin">Batal</button>
+          <button type="submit" class="btn btn-primary">Buka Akses</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 5. Modal Pengaturan URL Web App Google Apps Script -->
+  <div id="modalSettings" class="modal-backdrop">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 class="modal-title">⚙️ Konfigurasi Backend Google Apps Script</h3>
+        <button class="modal-close" data-close="modalSettings">&times;</button>
+      </div>
+      <form id="formSettings">
+        <div class="modal-body">
+          <p style="color:var(--text-muted); margin-bottom:1rem;">
+            Hubungkan dashboard ini ke Google Spreadsheet Anda via Web App Google Apps Script (GAS) agar semua data terupdate real-time secara dua arah.
+          </p>
+
+          <div class="form-group">
+            <label class="form-label">Google Apps Script Web App URL</label>
+            <input type="url" id="settingGasUrl" class="form-control" placeholder="https://script.google.com/macros/s/.../exec">
+            <p class="form-hint">Dapatkan URL ini setelah menerapkan (Deploy) Apps Script sebagai Web App (Akses: Anyone).</p>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">PIN Admin / Petugas</label>
+            <input type="password" id="settingAdminPin" class="form-control" placeholder="1234">
+          </div>
+
+          <div style="background:#f1f5f9; padding:0.75rem 1rem; border-radius:var(--radius-sm); font-size:0.775rem;">
+            <strong>Catatan:</strong> Jika URL dikosongkan, dashboard akan menggunakan <strong>47 Data Awal Logistik</strong> (Offline/Demo Mode) sehingga web tetap dapat diuji coba langsung.
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" id="btnResetDefaultData" class="btn btn-outline btn-danger" style="margin-right:auto;">Reset Data</button>
+          <button type="button" class="btn btn-outline" data-close="modalSettings">Tutup</button>
+          <button type="submit" class="btn btn-primary">Simpan & Uji Koneksi</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 6. Modal Riwayat Log Transaksi -->
+  <div id="modalLogs" class="modal-backdrop">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-header">
+        <h3 class="modal-title">📋 Riwayat Transaksi Logistik Terakhir</h3>
+        <button class="modal-close" data-close="modalLogs">&times;</button>
+      </div>
+      <div class="modal-body" style="max-height:60vh;">
+        <div class="table-responsive">
+          <table class="log-table">
+            <thead>
+              <tr>
+                <th>Waktu</th>
+                <th>Nama Barang</th>
+                <th>Jenis</th>
+                <th>Jumlah</th>
+                <th>Keterangan / Penerima</th>
+                <th>Petugas</th>
+              </tr>
+            </thead>
+            <tbody id="logTableBody">
+              <!-- Logs populated via app.js -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" data-close="modalLogs">Tutup</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- Application Logic -->
+  <script src="app.js"></script>
+</body>
+</html>
