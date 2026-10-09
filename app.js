@@ -1,5 +1,6 @@
 /**
  * APP.JS - SISTEM LOGISTIK SATGAS KARHUTLA KAB. PULAU TALIABU
+ * Update: Optimistic UI & Background Sync
  */
 
 const DEFAULT_INVENTORY = [
@@ -57,12 +58,7 @@ const AppState = {
   isAdmin: sessionStorage.getItem("satgas_is_admin") === "true",
   items: [],
   logs: JSON.parse(localStorage.getItem("satgas_local_logs") || "[]"),
-  filter: {
-    search: "",
-    status: "ALL",
-    satuan: "ALL",
-    sort: "id_asc"
-  },
+  filter: { search: "", status: "ALL", satuan: "ALL", sort: "id_asc" },
   isLoading: false,
   isLive: false
 };
@@ -141,7 +137,6 @@ function setupEventListeners() {
 
   document.getElementById("btnLogoutAdmin").addEventListener("click", exitAdminMode);
 
-  // Verifikasi PIN via Backend GAS
   document.getElementById("formAdminLogin").addEventListener("submit", async function (e) {
     e.preventDefault();
     const pin = document.getElementById("adminPinInput").value.trim();
@@ -151,11 +146,7 @@ function setupEventListeners() {
     submitBtn.textContent = "Memverifikasi...";
 
     try {
-      const res = await sendActionToGAS({
-        action: "verifyPin",
-        pin: pin
-      });
-
+      const res = await sendActionToGAS({ action: "verifyPin", pin: pin });
       if (res && res.status === "success") {
         AppState.isAdmin = true;
         sessionStorage.setItem("satgas_is_admin", "true");
@@ -193,8 +184,10 @@ function setupEventListeners() {
   document.getElementById("formTransaksi").addEventListener("submit", handleTransaksiSubmit);
   document.getElementById("formEdit").addEventListener("submit", handleEditSubmit);
 
+  // Fungsi dinamis untuk semua tombol Batal / Close Modal
   document.querySelectorAll("[data-close]").forEach(function (btn) {
-    btn.addEventListener("click", function () {
+    btn.addEventListener("click", function (e) {
+      e.preventDefault();
       closeModal(btn.getAttribute("data-close"));
     });
   });
@@ -242,7 +235,7 @@ async function fetchFromGAS() {
   updateConnectionStatus(false, "Menghubungkan...");
   try {
     const response = await fetch(AppState.gasUrl + "?action=read");
-    if (!response.ok) throw new Error("Gagal mengambil data dari Google Sheets");
+    if (!response.ok) throw new Error("Gagal mengambil data");
     const result = await response.json();
     if (result.status === "success" && Array.isArray(result.data)) {
       AppState.items = result.data;
@@ -252,7 +245,6 @@ async function fetchFromGAS() {
       AppState.isLive = true;
       saveLocalItems();
       updateConnectionStatus(true, "Terhubung: Sheets Live");
-      showToast("Data sinkron dengan Google Sheets!", "success");
     } else {
       throw new Error(result.message || "Respon backend tidak valid");
     }
@@ -269,7 +261,7 @@ async function fetchFromGAS() {
 
 async function sendActionToGAS(payload) {
   if (!AppState.gasUrl || AppState.gasUrl.includes("YOUR_SCRIPT_ID_HERE")) {
-    return { status: "offline", message: "Mode lokal aktif (URL backend belum disetel)" };
+    return { status: "offline", message: "Mode lokal aktif" };
   }
   try {
     const res = await fetch(AppState.gasUrl, {
@@ -289,6 +281,19 @@ async function sendActionToGAS(payload) {
   }
 }
 
+// FUNGSI SINKRONISASI LATAR BELAKANG
+function syncToGASBackground(payload) {
+  if (!AppState.gasUrl || AppState.gasUrl.includes("YOUR_SCRIPT_ID_HERE")) return;
+  
+  sendActionToGAS(payload).then(res => {
+    if (res && res.status === "error") {
+      showToast("Peringatan Server: " + res.message, "danger");
+    }
+  }).catch(err => {
+    console.warn("Background sync tertunda:", err);
+  });
+}
+
 function renderDashboard() {
   renderKPI();
   renderTable();
@@ -296,11 +301,8 @@ function renderDashboard() {
 
 function renderKPI() {
   const items = AppState.items;
-  let totalMasuk = 0;
-  let totalKeluar = 0;
-  let totalSisa = 0;
-  let habisCount = 0;
-  let menipisCount = 0;
+  let totalMasuk = 0, totalKeluar = 0, totalSisa = 0;
+  let habisCount = 0, menipisCount = 0;
 
   items.forEach(function (it) {
     const sisa = it.masuk - it.keluar;
@@ -318,10 +320,7 @@ function renderKPI() {
   document.getElementById("statStokPerhatian").textContent = habisCount + menipisCount;
   document.getElementById("statStokPerhatianSub").textContent = habisCount + " Habis, " + menipisCount + " Menipis";
   document.getElementById("lblTotalCount").textContent = items.length;
-  document.getElementById("lblLastSync").textContent = new Date().toLocaleTimeString("id-ID", {
-    hour: "2-digit",
-    minute: "2-digit"
-  }) + " WIT";
+  document.getElementById("lblLastSync").textContent = new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + " WITA";
 }
 
 function renderTable() {
@@ -339,9 +338,7 @@ function renderTable() {
     if (AppState.filter.status === "AVAILABLE" && sisa <= 5) return false;
     if (AppState.filter.status === "LOW" && (sisa <= 0 || sisa > 5)) return false;
     if (AppState.filter.status === "EMPTY" && sisa > 0) return false;
-    if (AppState.filter.satuan !== "ALL" && it.satuan.toLowerCase() !== AppState.filter.satuan.toLowerCase()) {
-      return false;
-    }
+    if (AppState.filter.satuan !== "ALL" && it.satuan.toLowerCase() !== AppState.filter.satuan.toLowerCase()) return false;
     return true;
   });
 
@@ -357,27 +354,16 @@ function renderTable() {
   });
 
   document.getElementById("lblShowingCount").textContent = filtered.length;
-
-  if (filtered.length === 0) {
-    emptyState.style.display = "block";
-    return;
-  } else {
-    emptyState.style.display = "none";
-  }
+  emptyState.style.display = filtered.length === 0 ? "block" : "none";
 
   filtered.forEach(function (item) {
     const tr = document.createElement("tr");
     const sisa = item.masuk - item.keluar;
     if (sisa <= 0) tr.classList.add("highlight-empty");
 
-    let statusBadge = "";
-    if (sisa <= 0) {
-      statusBadge = '<span class="badge badge-danger">Habis</span>';
-    } else if (sisa <= 5) {
-      statusBadge = '<span class="badge badge-warning">Menipis</span>';
-    } else {
-      statusBadge = '<span class="badge badge-success">Tersedia</span>';
-    }
+    let statusBadge = sisa <= 0 ? '<span class="badge badge-danger">Habis</span>' :
+                      sisa <= 5 ? '<span class="badge badge-warning">Menipis</span>' :
+                                  '<span class="badge badge-success">Tersedia</span>';
 
     let actionCell = "";
     if (AppState.isAdmin) {
@@ -407,6 +393,7 @@ function renderTable() {
   });
 }
 
+// TRANSAKSI MUTASI (MASUK/KELUAR)
 window.openTransaksiModal = function (itemId, jenis) {
   const item = AppState.items.find((i) => i.id === itemId);
   if (!item) return;
@@ -417,16 +404,12 @@ window.openTransaksiModal = function (itemId, jenis) {
   document.getElementById("transaksiJumlah").value = "";
   document.getElementById("transaksiKeterangan").value = "";
 
-  if (jenis === "KELUAR") {
-    document.getElementById("typeKeluar").checked = true;
-  } else {
-    document.getElementById("typeMasuk").checked = true;
-  }
+  document.getElementById(jenis === "KELUAR" ? "typeKeluar" : "typeMasuk").checked = true;
   openModal("modalTransaksi");
-  document.getElementById("transaksiJumlah").focus();
+  setTimeout(() => document.getElementById("transaksiJumlah").focus(), 100);
 };
 
-async function handleTransaksiSubmit(e) {
+function handleTransaksiSubmit(e) {
   e.preventDefault();
   const id = parseInt(document.getElementById("transaksiItemId").value, 10);
   const jenis = document.querySelector('input[name="transaksiJenis"]:checked').value;
@@ -446,58 +429,33 @@ async function handleTransaksiSubmit(e) {
     return;
   }
 
-  const submitBtn = document.getElementById("btnSubmitTransaksi");
-  submitBtn.disabled = true;
-  submitBtn.textContent = "Menyimpan...";
-
-  const payload = {
-    action: "transaksi",
-    id: id,
-    jenis: jenis,
-    jumlah: jumlah,
-    keterangan: keterangan,
-    petugas: petugas,
-    pin: sessionStorage.getItem("satgas_session_pin") || ""
-  };
-
-  const result = await sendActionToGAS(payload);
-
-  if (result.status === "error") {
-    showToast(result.message, "danger");
-    submitBtn.disabled = false;
-    submitBtn.textContent = "Simpan Transaksi";
-    return;
-  }
-
-  if (jenis === "MASUK") {
-    item.masuk += jumlah;
-  } else {
-    item.keluar += jumlah;
-  }
+  // 1. Pembaruan Lokal Optimis (Optimistic Update)
+  if (jenis === "MASUK") item.masuk += jumlah;
+  else item.keluar += jumlah;
   item.sisa = item.masuk - item.keluar;
 
   const now = new Date().toLocaleString("id-ID");
   AppState.logs.unshift({
-    timestamp: now,
-    idBarang: item.id,
-    namaBarang: item.nama,
-    jenis: jenis,
-    jumlah: jumlah,
-    satuan: item.satuan,
-    keterangan: keterangan,
-    petugas: petugas
+    timestamp: now, idBarang: item.id, namaBarang: item.nama,
+    jenis: jenis, jumlah: jumlah, satuan: item.satuan, keterangan: keterangan, petugas: petugas
   });
+  
   localStorage.setItem("satgas_local_logs", JSON.stringify(AppState.logs.slice(0, 50)));
-
   saveLocalItems();
   renderDashboard();
   closeModal("modalTransaksi");
-  submitBtn.disabled = false;
-  submitBtn.textContent = "Simpan Transaksi";
-  showToast(`Mutasi ${jenis} ${jumlah} ${item.satuan} berhasil!`, "success");
+  showToast(`Mutasi ${jenis} berhasil disimpan (sinkronisasi berjalan)`, "success");
+
+  // 2. Kirim ke Server di Latar Belakang
+  const payload = {
+    action: "transaksi", id: id, jenis: jenis, jumlah: jumlah,
+    keterangan: keterangan, petugas: petugas, pin: sessionStorage.getItem("satgas_session_pin") || ""
+  };
+  syncToGASBackground(payload);
 }
 
-async function handleTambahBarangSubmit(e) {
+// TAMBAH BARANG BARU
+function handleTambahBarangSubmit(e) {
   e.preventDefault();
   const nama = document.getElementById("tambahNama").value.trim();
   const satuan = document.getElementById("tambahSatuan").value.trim();
@@ -509,37 +467,11 @@ async function handleTambahBarangSubmit(e) {
     return;
   }
 
-  const submitBtn = document.getElementById("btnSubmitTambah");
-  submitBtn.disabled = true;
-  submitBtn.textContent = "Menyimpan...";
-
-  const payload = {
-    action: "tambah",
-    nama: nama,
-    satuan: satuan,
-    stokAwal: stokAwal,
-    keterangan: keterangan,
-    petugas: "Petugas Posko",
-    pin: sessionStorage.getItem("satgas_session_pin") || ""
-  };
-
-  const res = await sendActionToGAS(payload);
-  if (res.status === "error") {
-    showToast(res.message, "danger");
-    submitBtn.disabled = false;
-    submitBtn.textContent = "Simpan Barang";
-    return;
-  }
-
+  // 1. Pembaruan Lokal Optimis
   const maxId = AppState.items.reduce((max, it) => Math.max(max, it.id || 0), 0);
   const newItem = {
-    id: maxId + 1,
-    nama: nama,
-    masuk: stokAwal,
-    keluar: 0,
-    satuan: satuan,
-    sisa: stokAwal,
-    status: stokAwal <= 0 ? "Habis" : (stokAwal <= 5 ? "Menipis" : "Tersedia")
+    id: maxId + 1, nama: nama, masuk: stokAwal, keluar: 0, satuan: satuan,
+    sisa: stokAwal, status: stokAwal <= 0 ? "Habis" : (stokAwal <= 5 ? "Menipis" : "Tersedia")
   };
 
   AppState.items.push(newItem);
@@ -547,11 +479,17 @@ async function handleTambahBarangSubmit(e) {
   populateSatuanFilter();
   renderDashboard();
   closeModal("modalTambah");
-  submitBtn.disabled = false;
-  submitBtn.textContent = "Simpan Barang";
-  showToast(`Barang "${nama}" berhasil didaftarkan!`, "success");
+  showToast(`Barang "${nama}" berhasil ditambah (sinkronisasi berjalan)`, "success");
+
+  // 2. Kirim ke Server di Latar Belakang
+  const payload = {
+    action: "tambah", nama: nama, satuan: satuan, stokAwal: stokAwal,
+    keterangan: keterangan, petugas: "Petugas Posko", pin: sessionStorage.getItem("satgas_session_pin") || ""
+  };
+  syncToGASBackground(payload);
 }
 
+// EDIT / KOREKSI BARANG
 window.openEditModal = function (itemId) {
   const item = AppState.items.find((i) => i.id === itemId);
   if (!item) return;
@@ -564,7 +502,7 @@ window.openEditModal = function (itemId) {
   openModal("modalEdit");
 };
 
-async function handleEditSubmit(e) {
+function handleEditSubmit(e) {
   e.preventDefault();
   const id = parseInt(document.getElementById("editId").value, 10);
   const nama = document.getElementById("editNama").value.trim();
@@ -581,29 +519,7 @@ async function handleEditSubmit(e) {
   const item = AppState.items.find((i) => i.id === id);
   if (!item) return;
 
-  const submitBtn = document.getElementById("btnSubmitEdit");
-  submitBtn.disabled = true;
-  submitBtn.textContent = "Menyimpan...";
-
-  const payload = {
-    action: "edit",
-    id: id,
-    nama: nama,
-    satuan: satuan,
-    masuk: masuk,
-    keluar: keluar,
-    keterangan: keterangan,
-    pin: sessionStorage.getItem("satgas_session_pin") || ""
-  };
-
-  const res = await sendActionToGAS(payload);
-  if (res.status === "error") {
-    showToast(res.message, "danger");
-    submitBtn.disabled = false;
-    submitBtn.textContent = "Simpan Perubahan";
-    return;
-  }
-
+  // 1. Pembaruan Lokal Optimis
   item.nama = nama;
   item.satuan = satuan;
   item.masuk = masuk;
@@ -614,35 +530,37 @@ async function handleEditSubmit(e) {
   populateSatuanFilter();
   renderDashboard();
   closeModal("modalEdit");
-  submitBtn.disabled = false;
-  submitBtn.textContent = "Simpan Perubahan";
-  showToast(`Perubahan data "${nama}" berhasil disimpan!`, "success");
+  showToast(`Perubahan data "${nama}" disimpan (sinkronisasi berjalan)`, "success");
+
+  // 2. Kirim ke Server di Latar Belakang
+  const payload = {
+    action: "edit", id: id, nama: nama, satuan: satuan, masuk: masuk, keluar: keluar,
+    keterangan: keterangan, pin: sessionStorage.getItem("satgas_session_pin") || ""
+  };
+  syncToGASBackground(payload);
 }
 
-window.hapusBarang = async function (itemId) {
+// HAPUS BARANG
+window.hapusBarang = function (itemId) {
   const item = AppState.items.find((i) => i.id === itemId);
   if (!item) return;
   if (!confirm(`Hapus barang "${item.nama}" dari inventaris?`)) return;
 
-  const payload = {
-    action: "hapus",
-    id: itemId,
-    pin: sessionStorage.getItem("satgas_session_pin") || ""
-  };
-
-  const res = await sendActionToGAS(payload);
-  if (res.status === "error") {
-    showToast(res.message, "danger");
-    return;
-  }
-
+  // 1. Pembaruan Lokal Optimis
   AppState.items = AppState.items.filter((i) => i.id !== itemId);
   saveLocalItems();
   populateSatuanFilter();
   renderDashboard();
-  showToast(`Barang "${item.nama}" telah dihapus!`, "warning");
+  showToast(`Barang "${item.nama}" telah dihapus (sinkronisasi berjalan)`, "warning");
+
+  // 2. Kirim ke Server di Latar Belakang
+  const payload = {
+    action: "hapus", id: itemId, pin: sessionStorage.getItem("satgas_session_pin") || ""
+  };
+  syncToGASBackground(payload);
 };
 
+// Fungsi Utilitas dan Rendering
 function renderLogTable() {
   const tbody = document.getElementById("logTableBody");
   tbody.innerHTML = "";
@@ -669,9 +587,7 @@ function populateSatuanFilter() {
   const select = document.getElementById("filterSatuan");
   const currentVal = select.value;
   const satuanSet = new Set();
-  AppState.items.forEach((it) => {
-    if (it.satuan) satuanSet.add(it.satuan.trim());
-  });
+  AppState.items.forEach((it) => { if (it.satuan) satuanSet.add(it.satuan.trim()); });
   select.innerHTML = '<option value="ALL">Semua Satuan</option>';
   Array.from(satuanSet).sort().forEach((sat) => {
     const opt = document.createElement("option");
@@ -683,77 +599,60 @@ function populateSatuanFilter() {
 }
 
 function exportToCSV() {
-  if (AppState.items.length === 0) {
-    showToast("Tidak ada data untuk diekspor!", "warning");
-    return;
-  }
+  if (AppState.items.length === 0) return showToast("Tidak ada data untuk diekspor!", "warning");
   const headers = ["No", "Nama Barang", "Masuk", "Keluar", "Persediaan di Gudang", "Satuan", "Status"];
   const rows = AppState.items.map((it) => [
-    it.id,
-    `"${it.nama.replace(/"/g, '""')}"`,
-    it.masuk,
-    it.keluar,
-    it.masuk - it.keluar,
-    `"${it.satuan}"`,
-    it.masuk - it.keluar <= 0 ? "Habis" : (it.masuk - it.keluar <= 5 ? "Menipis" : "Tersedia")
+    it.id, `"${it.nama.replace(/"/g, '""')}"`, it.masuk, it.keluar, it.masuk - it.keluar,
+    `"${it.satuan}"`, it.masuk - it.keluar <= 0 ? "Habis" : (it.masuk - it.keluar <= 5 ? "Menipis" : "Tersedia")
   ]);
   const csvContent = "\uFEFF" + [headers.join(","), ...rows.map((r) => r.join(","))].join("\r\n");
   const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = url;
+  a.href = URL.createObjectURL(blob);
   a.download = `Logistik_Satgas_Karhutla_Taliabu_${new Date().toISOString().split("T")[0]}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
   showToast("File CSV logistik berhasil diunduh!", "success");
 }
 
 function openModal(id) {
   const modal = document.getElementById(id);
-  if (modal) modal.classList.add("open");
+  if (modal) {
+    modal.classList.add("open");
+    document.body.style.overflow = "hidden"; // Mencegah scrolling latar belakang di mobile
+  }
 }
 
 function closeModal(id) {
   const modal = document.getElementById(id);
-  if (modal) modal.classList.remove("open");
+  if (modal) {
+    modal.classList.remove("open");
+    document.body.style.overflow = "auto";
+  }
 }
 
 function showToast(message, type = "success") {
   const container = document.getElementById("toastContainer");
   const toast = document.createElement("div");
   toast.className = `toast toast-${type}`;
-  toast.innerHTML = `
-    <span>${escapeHtml(message)}</span>
-    <button style="background:none; border:none; cursor:pointer; font-size:1.1rem; color:inherit;" onclick="this.parentElement.remove()">&times;</button>
-  `;
+  toast.innerHTML = `<span>${escapeHtml(message)}</span>
+    <button style="background:none; border:none; cursor:pointer; font-size:1.1rem; color:inherit;" onclick="this.parentElement.remove()">&times;</button>`;
   container.appendChild(toast);
-  setTimeout(() => {
-    if (toast.parentElement) toast.remove();
-  }, 4000);
+  setTimeout(() => { if (toast.parentElement) toast.remove(); }, 4000);
 }
 
 function updateConnectionStatus(isLive, label) {
   const statusEl = document.getElementById("connectionStatus");
-  const textEl = document.getElementById("connectionStatusText");
-  if (isLive) {
-    statusEl.className = "status-pill status-live";
-  } else {
-    statusEl.className = "status-pill status-demo";
-  }
-  textEl.textContent = label;
+  statusEl.className = isLive ? "status-pill status-live" : "status-pill status-demo";
+  document.getElementById("connectionStatusText").textContent = label;
 }
 
 function setLoading(isLoading) {
   AppState.isLoading = isLoading;
   const btn = document.getElementById("btnRefresh");
   if (isLoading) {
-    btn.textContent = "⏳ Memuat...";
-    btn.disabled = true;
+    btn.textContent = "⏳ Memuat..."; btn.disabled = true;
   } else {
-    btn.textContent = "🔄 Segarkan";
-    btn.disabled = false;
+    btn.textContent = "🔄 Segarkan"; btn.disabled = false;
   }
 }
 
@@ -763,10 +662,5 @@ function saveLocalItems() {
 
 function escapeHtml(str) {
   if (!str) return "";
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
+  return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
