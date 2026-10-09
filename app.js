@@ -1,6 +1,6 @@
 /**
  * APP.JS - SISTEM LOGISTIK SATGAS KARHUTLA KAB. PULAU TALIABU
- * Update: Optimistic UI & Background Sync
+ * Update: Perbaikan Background Sync & Optimistic UI
  */
 
 const DEFAULT_INVENTORY = [
@@ -233,8 +233,12 @@ async function fetchFromGAS() {
   if (!AppState.gasUrl || AppState.gasUrl.includes("YOUR_SCRIPT_ID_HERE")) return;
   setLoading(true);
   updateConnectionStatus(false, "Menghubungkan...");
+  
+  // Cache busting untuk mencegah browser menampilkan data basi
+  const noCacheUrl = AppState.gasUrl + "?action=read&t=" + new Date().getTime();
+  
   try {
-    const response = await fetch(AppState.gasUrl + "?action=read");
+    const response = await fetch(noCacheUrl);
     if (!response.ok) throw new Error("Gagal mengambil data");
     const result = await response.json();
     if (result.status === "success" && Array.isArray(result.data)) {
@@ -263,20 +267,33 @@ async function sendActionToGAS(payload) {
   if (!AppState.gasUrl || AppState.gasUrl.includes("YOUR_SCRIPT_ID_HERE")) {
     return { status: "offline", message: "Mode lokal aktif" };
   }
+  
   try {
-    const res = await fetch(AppState.gasUrl, {
+    // Memaksa pengiriman parameter 'action' ke URL query sebagai fallback handal untuk Apps Script
+    const targetUrl = AppState.gasUrl + "?action=" + encodeURIComponent(payload.action);
+    
+    const res = await fetch(targetUrl, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify(payload)
     });
-    return await res.json();
+    
+    const textRes = await res.text();
+    try {
+      return JSON.parse(textRes);
+    } catch(e) {
+      console.warn("GAS tidak mengembalikan JSON valid:", textRes);
+      return { status: "error", message: "Server mengembalikan format tidak valid." };
+    }
+    
   } catch (err) {
+    console.warn("Fetch POST gagal, mencoba URL params fallback...", err);
     try {
       const params = new URLSearchParams(payload).toString();
       const resFallback = await fetch(AppState.gasUrl + "?" + params);
       return await resFallback.json();
     } catch (fallbackErr) {
-      return { status: "error", message: "Gagal terhubung ke GAS: " + err.message };
+      return { status: "error", message: "Koneksi ke server gagal: " + fallbackErr.message };
     }
   }
 }
@@ -287,7 +304,10 @@ function syncToGASBackground(payload) {
   
   sendActionToGAS(payload).then(res => {
     if (res && res.status === "error") {
-      showToast("Peringatan Server: " + res.message, "danger");
+      showToast("Peringatan Sinkronisasi: " + res.message, "danger");
+    } else if (res && res.status === "success") {
+      // Opsi: kita bisa fetch ulang dari server jika ingin sinkronisasi 2 arah otomatis di latar belakang
+      // fetchFromGAS();
     }
   }).catch(err => {
     console.warn("Background sync tertunda:", err);
@@ -444,7 +464,7 @@ function handleTransaksiSubmit(e) {
   saveLocalItems();
   renderDashboard();
   closeModal("modalTransaksi");
-  showToast(`Mutasi ${jenis} berhasil disimpan (sinkronisasi berjalan)`, "success");
+  showToast(`Mutasi ${jenis} berhasil dicatat!`, "success");
 
   // 2. Kirim ke Server di Latar Belakang
   const payload = {
@@ -479,7 +499,7 @@ function handleTambahBarangSubmit(e) {
   populateSatuanFilter();
   renderDashboard();
   closeModal("modalTambah");
-  showToast(`Barang "${nama}" berhasil ditambah (sinkronisasi berjalan)`, "success");
+  showToast(`Barang "${nama}" berhasil ditambah!`, "success");
 
   // 2. Kirim ke Server di Latar Belakang
   const payload = {
@@ -530,7 +550,7 @@ function handleEditSubmit(e) {
   populateSatuanFilter();
   renderDashboard();
   closeModal("modalEdit");
-  showToast(`Perubahan data "${nama}" disimpan (sinkronisasi berjalan)`, "success");
+  showToast(`Perubahan data "${nama}" disimpan!`, "success");
 
   // 2. Kirim ke Server di Latar Belakang
   const payload = {
@@ -551,7 +571,7 @@ window.hapusBarang = function (itemId) {
   saveLocalItems();
   populateSatuanFilter();
   renderDashboard();
-  showToast(`Barang "${item.nama}" telah dihapus (sinkronisasi berjalan)`, "warning");
+  showToast(`Barang "${item.nama}" telah dihapus!`, "warning");
 
   // 2. Kirim ke Server di Latar Belakang
   const payload = {
