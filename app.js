@@ -1,6 +1,6 @@
 /**
  * APP.JS - SISTEM LOGISTIK SATGAS KARHUTLA KAB. PULAU TALIABU
- * Update: Dynamic Row Numbering, Background Sync, Optimistic UI, Pagination, Mobile Action, & Input Validations
+ * Update: Image Fix (Thumbnail API), Upload Animation, Mobile/Desktop Gallery Slider
  */
 
 const DEFAULT_INVENTORY = [
@@ -58,8 +58,10 @@ const AppState = {
   isAdmin: sessionStorage.getItem("satgas_is_admin") === "true",
   items: [],
   logs: JSON.parse(localStorage.getItem("satgas_local_logs") || "[]"),
+  galeri: [],
   filter: { search: "", status: "ALL", satuan: "ALL", sort: "id_asc" },
   pagination: { page: 1, limit: 20 },
+  galleryPagination: { page: 1, limit: 5 }, // Pagination khusus galeri
   isLoading: false,
   isLive: false
 };
@@ -74,11 +76,7 @@ function initApp() {
 
   const savedLocalItems = localStorage.getItem("satgas_inventory_data");
   if (savedLocalItems) {
-    try {
-      AppState.items = JSON.parse(savedLocalItems);
-    } catch (e) {
-      AppState.items = [...DEFAULT_INVENTORY];
-    }
+    try { AppState.items = JSON.parse(savedLocalItems); } catch (e) { AppState.items = [...DEFAULT_INVENTORY]; }
   } else {
     AppState.items = [...DEFAULT_INVENTORY];
     saveLocalItems();
@@ -91,6 +89,7 @@ function initApp() {
   } else {
     updateConnectionStatus(false, "Mode Demo (Lokal)");
     renderDashboard();
+    renderGallery();
   }
 }
 
@@ -110,73 +109,49 @@ function updateTransaksiHint(jenis) {
 }
 
 function setupEventListeners() {
-  const stripNumbers = function (e) {
-    this.value = this.value.replace(/[0-9]/g, '');
-  };
+  const stripNumbers = function (e) { this.value = this.value.replace(/[0-9]/g, ''); };
   document.getElementById("tambahSatuan").addEventListener("input", stripNumbers);
   document.getElementById("editSatuan").addEventListener("input", stripNumbers);
 
   document.querySelectorAll('input[name="transaksiJenis"]').forEach(radio => {
-    radio.addEventListener('change', function(e) {
-      updateTransaksiHint(e.target.value);
-    });
+    radio.addEventListener('change', function(e) { updateTransaksiHint(e.target.value); });
   });
 
   document.getElementById("searchInput").addEventListener("input", function (e) {
     AppState.filter.search = e.target.value.toLowerCase().trim();
-    AppState.pagination.page = 1;
-    renderTable();
+    AppState.pagination.page = 1; renderTable();
   });
   document.getElementById("filterStatus").addEventListener("change", function (e) {
-    AppState.filter.status = e.target.value;
-    AppState.pagination.page = 1;
-    renderTable();
+    AppState.filter.status = e.target.value; AppState.pagination.page = 1; renderTable();
   });
   document.getElementById("filterSatuan").addEventListener("change", function (e) {
-    AppState.filter.satuan = e.target.value;
-    AppState.pagination.page = 1;
-    renderTable();
+    AppState.filter.satuan = e.target.value; AppState.pagination.page = 1; renderTable();
   });
   document.getElementById("sortOption").addEventListener("change", function (e) {
-    AppState.filter.sort = e.target.value;
-    AppState.pagination.page = 1;
-    renderTable();
+    AppState.filter.sort = e.target.value; AppState.pagination.page = 1; renderTable();
   });
 
   document.getElementById("itemsPerPage").addEventListener("change", function (e) {
-    AppState.pagination.limit = parseInt(e.target.value);
-    AppState.pagination.page = 1; 
-    renderTable();
+    AppState.pagination.limit = parseInt(e.target.value); AppState.pagination.page = 1; renderTable();
   });
   document.getElementById("btnPrevPage").addEventListener("click", function () {
-    if (AppState.pagination.page > 1) {
-      AppState.pagination.page--;
-      renderTable();
-    }
+    if (AppState.pagination.page > 1) { AppState.pagination.page--; renderTable(); }
   });
   document.getElementById("btnNextPage").addEventListener("click", function () {
-    AppState.pagination.page++;
-    renderTable();
+    AppState.pagination.page++; renderTable();
   });
 
   document.getElementById("btnRefresh").addEventListener("click", function () {
-    if (AppState.gasUrl && !AppState.gasUrl.includes("YOUR_SCRIPT_ID_HERE")) {
-      fetchFromGAS();
-    } else {
-      showToast("Data dimuat dari offline cache", "success");
-      renderDashboard();
-    }
+    if (AppState.gasUrl && !AppState.gasUrl.includes("YOUR_SCRIPT_ID_HERE")) { fetchFromGAS(); } 
+    else { showToast("Data dimuat dari offline cache", "success"); renderDashboard(); }
   });
 
   document.getElementById("btnExportCsv").addEventListener("click", exportToCSV);
-  document.getElementById("btnPrint").addEventListener("click", function () {
-    window.print();
-  });
+  document.getElementById("btnPrint").addEventListener("click", function () { window.print(); });
 
   document.getElementById("btnAdminToggle").addEventListener("click", function () {
-    if (AppState.isAdmin) {
-      exitAdminMode();
-    } else {
+    if (AppState.isAdmin) exitAdminMode();
+    else {
       openModal("modalAdminLogin");
       document.getElementById("adminPinInput").value = "";
       document.getElementById("adminPinInput").focus();
@@ -190,8 +165,7 @@ function setupEventListeners() {
     const pin = document.getElementById("adminPinInput").value.trim();
     const submitBtn = document.getElementById("btnSubmitLogin");
 
-    submitBtn.disabled = true;
-    submitBtn.textContent = "Memverifikasi...";
+    submitBtn.disabled = true; submitBtn.textContent = "Memverifikasi...";
 
     try {
       const res = await sendActionToGAS({ action: "verifyPin", pin: pin });
@@ -200,49 +174,118 @@ function setupEventListeners() {
         sessionStorage.setItem("satgas_is_admin", "true");
         sessionStorage.setItem("satgas_session_pin", pin);
         closeModal("modalAdminLogin");
-        updateAdminUI();
-        renderTable();
+        updateAdminUI(); renderTable();
         showToast("Akses Petugas Berhasil Diaktifkan!", "success");
-      } else {
-        showToast(res.message || "PIN Petugas salah!", "danger");
-      }
-    } catch (err) {
-      showToast("Gagal memverifikasi ke server!", "danger");
-    } finally {
-      submitBtn.disabled = false;
-      submitBtn.textContent = "Buka Akses";
-    }
+      } else { showToast(res.message || "PIN Petugas salah!", "danger"); }
+    } catch (err) { showToast("Gagal memverifikasi ke server!", "danger"); } 
+    finally { submitBtn.disabled = false; submitBtn.textContent = "Buka Akses"; }
   });
 
-  document.getElementById("btnViewLogs").addEventListener("click", function () {
-    renderLogTable();
-    openModal("modalLogs");
-  });
+  document.getElementById("btnViewLogs").addEventListener("click", function () { renderLogTable(); openModal("modalLogs"); });
 
   document.getElementById("btnTambahBarang").addEventListener("click", function () {
-    if (!AppState.isAdmin) {
-      openModal("modalAdminLogin");
-      return;
-    }
-    document.getElementById("formTambah").reset();
-    openModal("modalTambah");
+    if (!AppState.isAdmin) { openModal("modalAdminLogin"); return; }
+    document.getElementById("formTambah").reset(); openModal("modalTambah");
   });
 
   document.getElementById("formTambah").addEventListener("submit", handleTambahBarangSubmit);
   document.getElementById("formTransaksi").addEventListener("submit", handleTransaksiSubmit);
   document.getElementById("formEdit").addEventListener("submit", handleEditSubmit);
 
-  document.querySelectorAll("[data-close]").forEach(function (btn) {
-    btn.addEventListener("click", function (e) {
-      e.preventDefault();
-      closeModal(btn.getAttribute("data-close"));
+  // ------------------------------------------
+  // LOGIKA UPLOAD DENGAN ANIMASI LOADING (OVERLAY)
+  // ------------------------------------------
+  const btnUpload = document.getElementById("btnBukaUpload");
+  if (btnUpload) {
+    btnUpload.addEventListener("click", function () {
+      document.getElementById("formUpload").reset();
+      openModal("modalUpload");
     });
+  }
+
+  document.getElementById("formUpload").addEventListener("submit", async function (e) {
+    e.preventDefault();
+    const fileInput = document.getElementById("uploadFile");
+    const keterangan = document.getElementById("uploadKeterangan").value.trim();
+    const petugas = document.getElementById("uploadPetugas").value.trim();
+    const file = fileInput.files[0];
+
+    if (!file) return showToast("Silakan pilih foto terlebih dahulu!", "danger");
+    if (file.size > 5 * 1024 * 1024) return showToast("Ukuran foto maksimal 5MB.", "warning");
+
+    const submitBtn = document.getElementById("btnSubmitUpload");
+    const loadingOverlay = document.getElementById("uploadLoadingOverlay");
+    
+    // Nonaktifkan tombol & Munculkan overlay Spinner
+    submitBtn.disabled = true; 
+    loadingOverlay.style.display = "flex";
+
+    const reader = new FileReader();
+    reader.onload = async function() {
+      const base64Data = reader.result.split(',')[1];
+      const payload = {
+        action: "uploadFoto",
+        filename: file.name,
+        mimeType: file.type,
+        base64Data: base64Data,
+        keterangan: keterangan,
+        petugas: petugas,
+        pin: sessionStorage.getItem("satgas_session_pin") || ""
+      };
+      
+      try {
+        const res = await sendActionToGAS(payload);
+        if (res.status === "success") {
+          showToast("Foto berhasil dipublikasikan!", "success");
+          closeModal("modalUpload");
+          fetchFromGAS(); 
+        } else { showToast("Gagal mengunggah: " + res.message, "danger"); }
+      } catch (err) { 
+        showToast("Terjadi kesalahan saat mengunggah foto.", "danger"); 
+      } finally { 
+        // Tutup animasi overlay dan normalkan tombol
+        submitBtn.disabled = false; 
+        loadingOverlay.style.display = "none";
+      }
+    };
+    reader.readAsDataURL(file); 
+  });
+
+  // ------------------------------------------
+  // LISTENER UNTUK TOMBOL SLIDER GALERI
+  // ------------------------------------------
+  document.getElementById("btnGalPrev").addEventListener("click", function () {
+    if (AppState.galleryPagination.page > 1) {
+      AppState.galleryPagination.page--;
+      renderGallery();
+    }
+  });
+
+  document.getElementById("btnGalNext").addEventListener("click", function () {
+    const validPhotos = AppState.galeri ? AppState.galeri.filter(f => f.urlDrive && !f.urlDrive.includes("PASTE_LINK")) : [];
+    const totalPages = Math.ceil(validPhotos.length / AppState.galleryPagination.limit);
+    if (AppState.galleryPagination.page < totalPages) {
+      AppState.galleryPagination.page++;
+      renderGallery();
+    }
+  });
+
+  // Pantau ukuran layar agar otomatis mengubah rasio paginasi galeri (Desktop vs Mobile)
+  window.addEventListener('resize', function() {
+    const oldLimit = AppState.galleryPagination?.limit;
+    setGalleryLimit();
+    if (oldLimit !== AppState.galleryPagination.limit) {
+      AppState.galleryPagination.page = 1;
+      renderGallery();
+    }
+  });
+
+  document.querySelectorAll("[data-close]").forEach(function (btn) {
+    btn.addEventListener("click", function (e) { e.preventDefault(); closeModal(btn.getAttribute("data-close")); });
   });
 
   document.querySelectorAll(".modal-backdrop").forEach(function (backdrop) {
-    backdrop.addEventListener("click", function (e) {
-      if (e.target === backdrop) closeModal(backdrop.id);
-    });
+    backdrop.addEventListener("click", function (e) { if (e.target === backdrop) closeModal(backdrop.id); });
   });
 }
 
@@ -251,11 +294,13 @@ function updateAdminUI() {
   const btnTambah = document.getElementById("btnTambahBarang");
   const thAction = document.getElementById("thAction");
   const btnAdminToggle = document.getElementById("btnAdminToggle");
+  const btnUpload = document.getElementById("btnBukaUpload");
 
   if (AppState.isAdmin) {
     document.body.classList.add("admin-active"); 
     adminBanner.classList.add("active");
     btnTambah.style.display = "inline-flex";
+    if (btnUpload) btnUpload.style.display = "inline-flex";
     if (thAction) thAction.style.display = "table-cell";
     btnAdminToggle.textContent = "🚪 Keluar";
     btnAdminToggle.classList.replace("btn-primary", "btn-secondary");
@@ -263,18 +308,20 @@ function updateAdminUI() {
     document.body.classList.remove("admin-active");
     adminBanner.classList.remove("active");
     btnTambah.style.display = "none";
+    if (btnUpload) btnUpload.style.display = "none";
     if (thAction) thAction.style.display = "none";
     btnAdminToggle.textContent = "🔒 Mode Petugas";
     btnAdminToggle.classList.replace("btn-secondary", "btn-primary");
   }
+  
+  renderGallery(); // Memastikan tombol form di-update tanpa reload
 }
 
 function exitAdminMode() {
   AppState.isAdmin = false;
   sessionStorage.removeItem("satgas_is_admin");
   sessionStorage.removeItem("satgas_session_pin");
-  updateAdminUI();
-  renderTable();
+  updateAdminUI(); renderTable();
   showToast("Mode Petugas dinonaktifkan", "warning");
 }
 
@@ -291,9 +338,9 @@ async function fetchFromGAS() {
     const result = await response.json();
     if (result.status === "success" && Array.isArray(result.data)) {
       AppState.items = result.data;
-      if (result.recentLogs && Array.isArray(result.recentLogs)) {
-        AppState.logs = result.recentLogs;
-      }
+      if (result.recentLogs) AppState.logs = result.recentLogs;
+      if (result.galeri) AppState.galeri = result.galeri;
+      
       AppState.isLive = true;
       saveLocalItems();
       updateConnectionStatus(true, "db_on");
@@ -308,53 +355,33 @@ async function fetchFromGAS() {
     setLoading(false);
     populateSatuanFilter();
     renderDashboard();
+    renderGallery(); 
   }
 }
 
 async function sendActionToGAS(payload) {
-  if (!AppState.gasUrl || AppState.gasUrl.includes("YOUR_SCRIPT_ID_HERE")) {
-    return { status: "offline", message: "Mode lokal aktif" };
-  }
+  if (!AppState.gasUrl || AppState.gasUrl.includes("YOUR_SCRIPT_ID_HERE")) return { status: "offline", message: "Mode lokal aktif" };
   
   try {
     const targetUrl = AppState.gasUrl + "?action=" + encodeURIComponent(payload.action);
-    
-    const res = await fetch(targetUrl, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify(payload)
-    });
-    
+    const res = await fetch(targetUrl, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(payload) });
     const textRes = await res.text();
-    try {
-      return JSON.parse(textRes);
-    } catch(e) {
-      console.warn("GAS tidak mengembalikan JSON valid:", textRes);
-      return { status: "error", message: "Server mengembalikan format tidak valid." };
-    }
-    
+    try { return JSON.parse(textRes); } 
+    catch(e) { return { status: "error", message: "Server mengembalikan format tidak valid." }; }
   } catch (err) {
-    console.warn("Fetch POST gagal, mencoba URL params fallback...", err);
     try {
-      const params = newSearchParams(payload).toString();
+      const params = new URLSearchParams(payload).toString();
       const resFallback = await fetch(AppState.gasUrl + "?" + params);
       return await resFallback.json();
-    } catch (fallbackErr) {
-      return { status: "error", message: "Koneksi ke server gagal: " + fallbackErr.message };
-    }
+    } catch (fallbackErr) { return { status: "error", message: "Koneksi ke server gagal: " + fallbackErr.message }; }
   }
 }
 
 function syncToGASBackground(payload) {
   if (!AppState.gasUrl || AppState.gasUrl.includes("YOUR_SCRIPT_ID_HERE")) return;
-  
   sendActionToGAS(payload).then(res => {
-    if (res && res.status === "error") {
-      showToast("Peringatan Sinkronisasi: " + res.message, "danger");
-    }
-  }).catch(err => {
-    console.warn("Background sync tertunda:", err);
-  });
+    if (res && res.status === "error") showToast("Peringatan Sinkronisasi: " + res.message, "danger");
+  }).catch(err => { console.warn("Background sync tertunda:", err); });
 }
 
 function renderDashboard() {
@@ -369,11 +396,8 @@ function renderKPI() {
 
   items.forEach(function (it) {
     const sisa = it.masuk - it.keluar;
-    totalMasuk += it.masuk;
-    totalKeluar += it.keluar;
-    totalSisa += sisa;
-    if (sisa <= 0) habisCount++;
-    else if (sisa <= 5) menipisCount++;
+    totalMasuk += it.masuk; totalKeluar += it.keluar; totalSisa += sisa;
+    if (sisa <= 0) habisCount++; else if (sisa <= 5) menipisCount++;
   });
 
   document.getElementById("statTotalItems").textContent = items.length;
@@ -406,8 +430,7 @@ function renderTable() {
   });
 
   filtered.sort(function (a, b) {
-    const sisaA = a.masuk - a.keluar;
-    const sisaB = b.masuk - b.keluar;
+    const sisaA = a.masuk - a.keluar; const sisaB = b.masuk - b.keluar;
     if (AppState.filter.sort === "id_asc") return a.id - b.id;
     if (AppState.filter.sort === "name_asc") return a.nama.localeCompare(b.nama);
     if (AppState.filter.sort === "stock_desc") return sisaB - sisaA;
@@ -418,10 +441,7 @@ function renderTable() {
 
   const totalItems = filtered.length;
   const totalPages = Math.ceil(totalItems / AppState.pagination.limit) || 1;
-  
-  if (AppState.pagination.page > totalPages) {
-    AppState.pagination.page = totalPages;
-  }
+  if (AppState.pagination.page > totalPages) AppState.pagination.page = totalPages;
 
   const startIndex = (AppState.pagination.page - 1) * AppState.pagination.limit;
   const endIndex = startIndex + AppState.pagination.limit;
@@ -434,13 +454,10 @@ function renderTable() {
 
   emptyState.style.display = totalItems === 0 ? "block" : "none";
 
-  // Perubahan parameter: tambahkan 'index' pada forEach
   paginatedItems.forEach(function (item, index) {
     const tr = document.createElement("tr");
     const sisa = item.masuk - item.keluar;
-    
-    // Perhitungan nomor urut dinamis
-    const rowNumber = startIndex + index + 1;
+    const rowNumber = startIndex + index + 1; 
     
     if (sisa <= 0) tr.classList.add("highlight-empty");
 
@@ -448,9 +465,7 @@ function renderTable() {
                       sisa <= 5 ? '<span class="badge badge-warning">Menipis</span>' :
                                   '<span class="badge badge-success">Tersedia</span>';
 
-    let desktopActionCell = "";
-    let mobileActionBlock = "";
-    let nameCellAttrs = "";
+    let desktopActionCell = ""; let mobileActionBlock = ""; let nameCellAttrs = "";
 
     if (AppState.isAdmin) {
       const actionButtons = `
@@ -460,25 +475,13 @@ function renderTable() {
         <button class="btn-icon-action del-btn" title="Hapus" onclick="event.stopPropagation(); hapusBarang(${item.id})">🗑️</button>
       `;
 
-      desktopActionCell = `
-        <td class="col-action" style="text-align:center;">
-          <div class="action-buttons-group">${actionButtons}</div>
-        </td>
-      `;
-
-      mobileActionBlock = `
-        <div class="mobile-action-bar">
-          <div class="action-buttons-group" style="justify-content: flex-start; gap: 0.4rem; width: 100%;">
-            ${actionButtons}
-          </div>
-        </div>
-      `;
-
+      desktopActionCell = `<td class="col-action" style="text-align:center;"><div class="action-buttons-group">${actionButtons}</div></td>`;
+      mobileActionBlock = `<div class="mobile-action-bar"><div class="action-buttons-group" style="justify-content: flex-start; gap: 0.4rem; width: 100%;">${actionButtons}</div></div>`;
       nameCellAttrs = `onclick="this.parentElement.classList.toggle('row-expanded')"`;
     }
 
     tr.innerHTML = `
-      <td class="col-num">${rowNumber}</td> <!-- Menerapkan nomor urut dinamis -->
+      <td class="col-num">${rowNumber}</td>
       <td class="col-name" ${nameCellAttrs}>
         <div style="display:flex; align-items:center; justify-content:space-between; width:100%;">
           <span>${escapeHtml(item.nama)}</span>
@@ -497,7 +500,86 @@ function renderTable() {
   });
 }
 
-// TRANSAKSI MUTASI (MASUK/KELUAR)
+// ---------------------------------------------------------
+// FUNGSI KONVERSI LINK & RENDER GALERI DOKUMENTASI (DENGAN PAGINASI SLIDER)
+// ---------------------------------------------------------
+function getDriveDirectUrl(url) {
+  if (!url) return '';
+  const match = url.match(/[-\w]{25,}/);
+  if (match) {
+    // MENGUBAH URL KE GOOGLE DRIVE THUMBNAIL AGAR TIDAK DIBLOKIR BROWSER
+    return `https://drive.google.com/thumbnail?id=${match[0]}&sz=w1000`;
+  }
+  return url;
+}
+
+function setGalleryLimit() {
+  const isMobile = window.innerWidth <= 767;
+  AppState.galleryPagination.limit = isMobile ? 1 : 5; // 1 Untuk slide HP, 5 Untuk grid PC
+}
+
+function renderGallery() {
+  setGalleryLimit();
+  
+  const wrapper = document.getElementById("galleryWrapper");
+  const grid = document.getElementById("galleryGrid");
+  const controls = document.getElementById("galleryControls");
+  const pageInfo = document.getElementById("galPageInfo");
+  const btnPrev = document.getElementById("btnGalPrev");
+  const btnNext = document.getElementById("btnGalNext");
+  
+  grid.innerHTML = "";
+  
+  const validPhotos = AppState.galeri ? AppState.galeri.filter(foto => foto.urlDrive && !foto.urlDrive.includes("PASTE_LINK")) : [];
+  
+  // Jika tidak ada foto, kontrol bagaimana disembunyikan
+  if (validPhotos.length === 0) {
+    if (controls) controls.style.display = "none";
+    if (AppState.isAdmin) {
+       wrapper.style.display = "block";
+       grid.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted); grid-column: 1 / -1; border: 2px dashed var(--border); border-radius: 8px;">Belum ada dokumentasi publik. Silakan klik tombol "➕ Unggah" di atas.</div>`;
+    } else {
+       wrapper.style.display = "none";
+    }
+    return;
+  }
+
+  // Jika ada foto, munculkan galeri beserta navigasi
+  wrapper.style.display = "block";
+  if (controls) controls.style.display = "flex";
+
+  const totalPages = Math.ceil(validPhotos.length / AppState.galleryPagination.limit) || 1;
+  if (AppState.galleryPagination.page > totalPages) AppState.galleryPagination.page = totalPages;
+
+  if (pageInfo) pageInfo.textContent = `${AppState.galleryPagination.page} / ${totalPages}`;
+  if (btnPrev) btnPrev.disabled = AppState.galleryPagination.page === 1;
+  if (btnNext) btnNext.disabled = AppState.galleryPagination.page === totalPages;
+
+  const startIndex = (AppState.galleryPagination.page - 1) * AppState.galleryPagination.limit;
+  const paginatedPhotos = validPhotos.slice(startIndex, startIndex + AppState.galleryPagination.limit);
+
+  paginatedPhotos.forEach(foto => {
+    const card = document.createElement("div");
+    card.className = "gallery-card";
+    
+    const imageUrl = getDriveDirectUrl(foto.urlDrive);
+    const tanggalHtml = foto.tanggal ? `<div class="gallery-date">${escapeHtml(foto.tanggal)}</div>` : '';
+    
+    card.innerHTML = `
+      <div class="gallery-img-wrapper">
+        <img src="${imageUrl}" alt="${escapeHtml(foto.judul)}" loading="lazy" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%25%22 height=%22100%25%22><rect width=%22100%25%22 height=%22100%25%22 fill=%22%23e2e8f0%22/><text x=%2250%25%22 y=%2250%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 font-family=%22sans-serif%22 font-size=%2214px%22 fill=%22%2364748b%22>Gambar Rusak / Akses Ditolak</text></svg>'">
+      </div>
+      <div class="gallery-content">
+        ${tanggalHtml}
+        <h4 class="gallery-title">${escapeHtml(foto.judul)}</h4>
+        <p class="gallery-desc">${escapeHtml(foto.deskripsi)}</p>
+        <p style="font-size: 0.7rem; color: var(--primary); margin-top: 0.4rem; font-weight:600;">${escapeHtml(foto.petugas || '')}</p>
+      </div>
+    `;
+    grid.appendChild(card);
+  });
+}
+
 window.openTransaksiModal = function (itemId, jenis) {
   const item = AppState.items.find((i) => i.id === itemId);
   if (!item) return;
@@ -523,43 +605,24 @@ function handleTransaksiSubmit(e) {
   const petugas = document.getElementById("transaksiPetugas").value.trim() || "Petugas";
   const item = AppState.items.find((i) => i.id === id);
 
-  if (!item || isNaN(jumlah) || jumlah <= 0) {
-    showToast("Jumlah mutasi tidak valid!", "danger");
-    return;
-  }
+  if (!item || isNaN(jumlah) || jumlah <= 0) return showToast("Jumlah mutasi tidak valid!", "danger");
 
   const sisa = item.masuk - item.keluar;
-  if (jenis === "KELUAR" && jumlah > sisa) {
-    showToast(`Stok tidak cukup! Sisa: ${sisa} ${item.satuan}`, "danger");
-    return;
-  }
+  if (jenis === "KELUAR" && jumlah > sisa) return showToast(`Stok tidak cukup! Sisa: ${sisa} ${item.satuan}`, "danger");
 
-  // 1. Pembaruan Lokal Optimis
-  if (jenis === "MASUK") item.masuk += jumlah;
-  else item.keluar += jumlah;
+  if (jenis === "MASUK") item.masuk += jumlah; else item.keluar += jumlah;
   item.sisa = item.masuk - item.keluar;
 
   const now = new Date().toLocaleString("id-ID");
-  AppState.logs.unshift({
-    timestamp: now, idBarang: item.id, namaBarang: item.nama,
-    jenis: jenis, jumlah: jumlah, satuan: item.satuan, keterangan: keterangan, petugas: petugas
-  });
+  AppState.logs.unshift({ timestamp: now, idBarang: item.id, namaBarang: item.nama, jenis: jenis, jumlah: jumlah, satuan: item.satuan, keterangan: keterangan, petugas: petugas });
   
   localStorage.setItem("satgas_local_logs", JSON.stringify(AppState.logs.slice(0, 50)));
-  saveLocalItems();
-  renderDashboard();
-  closeModal("modalTransaksi");
+  saveLocalItems(); renderDashboard(); closeModal("modalTransaksi");
   showToast(`Mutasi ${jenis} berhasil dicatat!`, "success");
 
-  // 2. Kirim ke Server di Latar Belakang
-  const payload = {
-    action: "transaksi", id: id, jenis: jenis, jumlah: jumlah,
-    keterangan: keterangan, petugas: petugas, pin: sessionStorage.getItem("satgas_session_pin") || ""
-  };
-  syncToGASBackground(payload);
+  syncToGASBackground({ action: "transaksi", id: id, jenis: jenis, jumlah: jumlah, keterangan: keterangan, petugas: petugas, pin: sessionStorage.getItem("satgas_session_pin") || "" });
 }
 
-// TAMBAH BARANG BARU
 function handleTambahBarangSubmit(e) {
   e.preventDefault();
   const nama = document.getElementById("tambahNama").value.trim();
@@ -567,34 +630,17 @@ function handleTambahBarangSubmit(e) {
   const stokAwal = parseInt(document.getElementById("tambahStokAwal").value, 10) || 0;
   const keterangan = document.getElementById("tambahKeterangan").value.trim() || "Barang baru";
 
-  if (!nama || !satuan) {
-    showToast("Nama dan satuan wajib diisi!", "danger");
-    return;
-  }
+  if (!nama || !satuan) return showToast("Nama dan satuan wajib diisi!", "danger");
 
-  // 1. Pembaruan Lokal Optimis
   const maxId = AppState.items.reduce((max, it) => Math.max(max, it.id || 0), 0);
-  const newItem = {
-    id: maxId + 1, nama: nama, masuk: stokAwal, keluar: 0, satuan: satuan,
-    sisa: stokAwal, status: stokAwal <= 0 ? "Habis" : (stokAwal <= 5 ? "Menipis" : "Tersedia")
-  };
+  const newItem = { id: maxId + 1, nama: nama, masuk: stokAwal, keluar: 0, satuan: satuan, sisa: stokAwal, status: stokAwal <= 0 ? "Habis" : (stokAwal <= 5 ? "Menipis" : "Tersedia") };
 
-  AppState.items.push(newItem);
-  saveLocalItems();
-  populateSatuanFilter();
-  renderDashboard();
-  closeModal("modalTambah");
+  AppState.items.push(newItem); saveLocalItems(); populateSatuanFilter(); renderDashboard(); closeModal("modalTambah");
   showToast(`Barang "${nama}" berhasil ditambah!`, "success");
 
-  // 2. Kirim ke Server di Latar Belakang
-  const payload = {
-    action: "tambah", nama: nama, satuan: satuan, stokAwal: stokAwal,
-    keterangan: keterangan, petugas: "Petugas Posko", pin: sessionStorage.getItem("satgas_session_pin") || ""
-  };
-  syncToGASBackground(payload);
+  syncToGASBackground({ action: "tambah", nama: nama, satuan: satuan, stokAwal: stokAwal, keterangan: keterangan, petugas: "Petugas Posko", pin: sessionStorage.getItem("satgas_session_pin") || "" });
 }
 
-// EDIT / KOREKSI BARANG
 window.openEditModal = function (itemId) {
   const item = AppState.items.find((i) => i.id === itemId);
   if (!item) return;
@@ -616,158 +662,82 @@ function handleEditSubmit(e) {
   const keluar = parseInt(document.getElementById("editKeluar").value, 10);
   const keterangan = document.getElementById("editKeterangan").value.trim();
 
-  if (isNaN(masuk) || isNaN(keluar) || masuk < 0 || keluar < 0) {
-    showToast("Nilai masuk dan keluar harus angka valid!", "danger");
-    return;
-  }
+  if (isNaN(masuk) || isNaN(keluar) || masuk < 0 || keluar < 0) return showToast("Nilai masuk dan keluar harus angka valid!", "danger");
 
   const item = AppState.items.find((i) => i.id === id);
   if (!item) return;
 
-  // 1. Pembaruan Lokal Optimis
-  item.nama = nama;
-  item.satuan = satuan;
-  item.masuk = masuk;
-  item.keluar = keluar;
-  item.sisa = masuk - keluar;
-
-  saveLocalItems();
-  populateSatuanFilter();
-  renderDashboard();
-  closeModal("modalEdit");
+  item.nama = nama; item.satuan = satuan; item.masuk = masuk; item.keluar = keluar; item.sisa = masuk - keluar;
+  saveLocalItems(); populateSatuanFilter(); renderDashboard(); closeModal("modalEdit");
   showToast(`Perubahan data "${nama}" disimpan!`, "success");
 
-  // 2. Kirim ke Server di Latar Belakang
-  const payload = {
-    action: "edit", id: id, nama: nama, satuan: satuan, masuk: masuk, keluar: keluar,
-    keterangan: keterangan, pin: sessionStorage.getItem("satgas_session_pin") || ""
-  };
-  syncToGASBackground(payload);
+  syncToGASBackground({ action: "edit", id: id, nama: nama, satuan: satuan, masuk: masuk, keluar: keluar, keterangan: keterangan, pin: sessionStorage.getItem("satgas_session_pin") || "" });
 }
 
-// HAPUS BARANG
 window.hapusBarang = function (itemId) {
   const item = AppState.items.find((i) => i.id === itemId);
   if (!item) return;
   if (!confirm(`Hapus barang "${item.nama}" dari inventaris?`)) return;
 
-  // 1. Pembaruan Lokal Optimis
   AppState.items = AppState.items.filter((i) => i.id !== itemId);
-  saveLocalItems();
-  populateSatuanFilter();
-  renderDashboard();
+  saveLocalItems(); populateSatuanFilter(); renderDashboard();
   showToast(`Barang "${item.nama}" telah dihapus!`, "warning");
 
-  // 2. Kirim ke Server di Latar Belakang
-  const payload = {
-    action: "hapus", id: itemId, pin: sessionStorage.getItem("satgas_session_pin") || ""
-  };
-  syncToGASBackground(payload);
+  syncToGASBackground({ action: "hapus", id: itemId, pin: sessionStorage.getItem("satgas_session_pin") || "" });
 };
 
-// Fungsi Utilitas dan Rendering
 function renderLogTable() {
   const tbody = document.getElementById("logTableBody");
   tbody.innerHTML = "";
   if (!AppState.logs || AppState.logs.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:1.5rem; color:var(--text-muted);">Belum ada riwayat tercatat.</td></tr>';
-    return;
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:1.5rem; color:var(--text-muted);">Belum ada riwayat tercatat.</td></tr>'; return;
   }
   AppState.logs.forEach(function (log) {
     const tr = document.createElement("tr");
     const jenisClass = (log.jenis || "").includes("MASUK") ? "badge-success" : "badge-danger";
-    tr.innerHTML = `
-      <td>${escapeHtml(log.timestamp || "-")}</td>
-      <td><strong>${escapeHtml(log.namaBarang || "-")}</strong></td>
-      <td><span class="badge ${jenisClass}">${escapeHtml(log.jenis || "-")}</span></td>
-      <td>${escapeHtml(String(log.jumlah || "-"))} ${escapeHtml(log.satuan || "")}</td>
-      <td>${escapeHtml(log.keterangan || "-")}</td>
-      <td>${escapeHtml(log.petugas || "-")}</td>
-    `;
+    tr.innerHTML = `<td>${escapeHtml(log.timestamp || "-")}</td><td><strong>${escapeHtml(log.namaBarang || "-")}</strong></td><td><span class="badge ${jenisClass}">${escapeHtml(log.jenis || "-")}</span></td><td>${escapeHtml(String(log.jumlah || "-"))} ${escapeHtml(log.satuan || "")}</td><td>${escapeHtml(log.keterangan || "-")}</td><td>${escapeHtml(log.petugas || "-")}</td>`;
     tbody.appendChild(tr);
   });
 }
 
 function populateSatuanFilter() {
-  const select = document.getElementById("filterSatuan");
-  const currentVal = select.value;
-  const satuanSet = new Set();
+  const select = document.getElementById("filterSatuan"); const currentVal = select.value; const satuanSet = new Set();
   AppState.items.forEach((it) => { if (it.satuan) satuanSet.add(it.satuan.trim()); });
   select.innerHTML = '<option value="ALL">Semua Satuan</option>';
   Array.from(satuanSet).sort().forEach((sat) => {
-    const opt = document.createElement("option");
-    opt.value = sat;
-    opt.textContent = sat;
-    if (sat === currentVal) opt.selected = true;
-    select.appendChild(opt);
+    const opt = document.createElement("option"); opt.value = sat; opt.textContent = sat;
+    if (sat === currentVal) opt.selected = true; select.appendChild(opt);
   });
 }
 
 function exportToCSV() {
   if (AppState.items.length === 0) return showToast("Tidak ada data untuk diekspor!", "warning");
   const headers = ["No", "Nama Barang", "Masuk", "Keluar", "Persediaan di Gudang", "Satuan", "Status"];
-  
-  // Menggunakan index berurutan juga untuk output CSV
   const rows = AppState.items.map((it, index) => [
     index + 1, `"${it.nama.replace(/"/g, '""')}"`, it.masuk, it.keluar, it.masuk - it.keluar,
     `"${it.satuan}"`, it.masuk - it.keluar <= 0 ? "Habis" : (it.masuk - it.keluar <= 5 ? "Menipis" : "Tersedia")
   ]);
   const csvContent = "\uFEFF" + [headers.join(","), ...rows.map((r) => r.join(","))].join("\r\n");
   const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
   a.download = `Logistik_Satgas_Karhutla_Taliabu_${new Date().toISOString().split("T")[0]}.csv`;
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  showToast("File CSV logistik berhasil diunduh!", "success");
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); showToast("File CSV logistik berhasil diunduh!", "success");
 }
 
-function openModal(id) {
-  const modal = document.getElementById(id);
-  if (modal) {
-    modal.classList.add("open");
-    document.body.style.overflow = "hidden"; 
-  }
-}
-
-function closeModal(id) {
-  const modal = document.getElementById(id);
-  if (modal) {
-    modal.classList.remove("open");
-    document.body.style.overflow = "auto";
-  }
-}
-
+function openModal(id) { const modal = document.getElementById(id); if (modal) { modal.classList.add("open"); document.body.style.overflow = "hidden"; } }
+function closeModal(id) { const modal = document.getElementById(id); if (modal) { modal.classList.remove("open"); document.body.style.overflow = "auto"; } }
 function showToast(message, type = "success") {
-  const container = document.getElementById("toastContainer");
-  const toast = document.createElement("div");
-  toast.className = `toast toast-${type}`;
-  toast.innerHTML = `<span>${escapeHtml(message)}</span>
-    <button style="background:none; border:none; cursor:pointer; font-size:1.1rem; color:inherit;" onclick="this.parentElement.remove()">&times;</button>`;
-  container.appendChild(toast);
-  setTimeout(() => { if (toast.parentElement) toast.remove(); }, 4000);
+  const container = document.getElementById("toastContainer"); const toast = document.createElement("div"); toast.className = `toast toast-${type}`;
+  toast.innerHTML = `<span>${escapeHtml(message)}</span><button style="background:none; border:none; cursor:pointer; font-size:1.1rem; color:inherit;" onclick="this.parentElement.remove()">&times;</button>`;
+  container.appendChild(toast); setTimeout(() => { if (toast.parentElement) toast.remove(); }, 4000);
 }
-
 function updateConnectionStatus(isLive, label) {
-  const statusEl = document.getElementById("connectionStatus");
-  statusEl.className = isLive ? "status-pill status-live" : "status-pill status-demo";
+  const statusEl = document.getElementById("connectionStatus"); statusEl.className = isLive ? "status-pill status-live" : "status-pill status-demo";
   document.getElementById("connectionStatusText").textContent = label;
 }
-
 function setLoading(isLoading) {
-  AppState.isLoading = isLoading;
-  const btn = document.getElementById("btnRefresh");
-  if (isLoading) {
-    btn.textContent = "⏳ Memuat..."; btn.disabled = true;
-  } else {
-    btn.textContent = "🔄 Segarkan"; btn.disabled = false;
-  }
+  AppState.isLoading = isLoading; const btn = document.getElementById("btnRefresh");
+  if (isLoading) { btn.textContent = "⏳ Memuat..."; btn.disabled = true; } else { btn.textContent = "🔄 Segarkan"; btn.disabled = false; }
 }
-
-function saveLocalItems() {
-  localStorage.setItem("satgas_inventory_data", JSON.stringify(AppState.items));
-}
-
-function escapeHtml(str) {
-  if (!str) return "";
-  return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
-}
+function saveLocalItems() { localStorage.setItem("satgas_inventory_data", JSON.stringify(AppState.items)); }
+function escapeHtml(str) { return !str ? "" : String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;"); }
