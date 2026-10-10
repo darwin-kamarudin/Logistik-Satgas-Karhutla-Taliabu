@@ -274,7 +274,7 @@ async function fetchFromGAS() {
       }
       AppState.isLive = true;
       saveLocalItems();
-      updateConnectionStatus(true, "Terhubung: Sheets Live");
+      updateConnectionStatus(true, "db_on");
     } else {
       throw new Error(result.message || "Respon backend tidak valid");
     }
