@@ -1,6 +1,6 @@
 /**
  * APP.JS - SISTEM LOGISTIK SATGAS KARHUTLA KAB. PULAU TALIABU
- * Update: Image Fix (Thumbnail API), Upload Animation, Mobile/Desktop Gallery Slider
+ * Update: Image Fix, Upload Animation, Mobile Gallery Slider, Strict Text Validation
  */
 
 const DEFAULT_INVENTORY = [
@@ -61,7 +61,7 @@ const AppState = {
   galeri: [],
   filter: { search: "", status: "ALL", satuan: "ALL", sort: "id_asc" },
   pagination: { page: 1, limit: 20 },
-  galleryPagination: { page: 1, limit: 5 }, // Pagination khusus galeri
+  galleryPagination: { page: 1, limit: 5 }, 
   isLoading: false,
   isLive: false
 };
@@ -109,9 +109,12 @@ function updateTransaksiHint(jenis) {
 }
 
 function setupEventListeners() {
-  const stripNumbers = function (e) { this.value = this.value.replace(/[0-9]/g, ''); };
-  document.getElementById("tambahSatuan").addEventListener("input", stripNumbers);
-  document.getElementById("editSatuan").addEventListener("input", stripNumbers);
+  // Lapis Pengamanan Tambahan untuk Satuan (Selain saat mengetik, juga saat data ditempel/paste)
+  const stripNumbersAndSymbols = function (e) { 
+    this.value = this.value.replace(/[^a-zA-Z\s]/g, ''); 
+  };
+  document.getElementById("tambahSatuan").addEventListener("input", stripNumbersAndSymbols);
+  document.getElementById("editSatuan").addEventListener("input", stripNumbersAndSymbols);
 
   document.querySelectorAll('input[name="transaksiJenis"]').forEach(radio => {
     radio.addEventListener('change', function(e) { updateTransaksiHint(e.target.value); });
@@ -270,7 +273,6 @@ function setupEventListeners() {
     }
   });
 
-  // Pantau ukuran layar agar otomatis mengubah rasio paginasi galeri (Desktop vs Mobile)
   window.addEventListener('resize', function() {
     const oldLimit = AppState.galleryPagination?.limit;
     setGalleryLimit();
@@ -314,7 +316,7 @@ function updateAdminUI() {
     btnAdminToggle.classList.replace("btn-secondary", "btn-primary");
   }
   
-  renderGallery(); // Memastikan tombol form di-update tanpa reload
+  renderGallery(); 
 }
 
 function exitAdminMode() {
@@ -500,14 +502,10 @@ function renderTable() {
   });
 }
 
-// ---------------------------------------------------------
-// FUNGSI KONVERSI LINK & RENDER GALERI DOKUMENTASI (DENGAN PAGINASI SLIDER)
-// ---------------------------------------------------------
 function getDriveDirectUrl(url) {
   if (!url) return '';
   const match = url.match(/[-\w]{25,}/);
   if (match) {
-    // MENGUBAH URL KE GOOGLE DRIVE THUMBNAIL AGAR TIDAK DIBLOKIR BROWSER
     return `https://drive.google.com/thumbnail?id=${match[0]}&sz=w1000`;
   }
   return url;
@@ -532,7 +530,6 @@ function renderGallery() {
   
   const validPhotos = AppState.galeri ? AppState.galeri.filter(foto => foto.urlDrive && !foto.urlDrive.includes("PASTE_LINK")) : [];
   
-  // Jika tidak ada foto, kontrol bagaimana disembunyikan
   if (validPhotos.length === 0) {
     if (controls) controls.style.display = "none";
     if (AppState.isAdmin) {
@@ -544,7 +541,6 @@ function renderGallery() {
     return;
   }
 
-  // Jika ada foto, munculkan galeri beserta navigasi
   wrapper.style.display = "block";
   if (controls) controls.style.display = "flex";
 
@@ -626,11 +622,12 @@ function handleTransaksiSubmit(e) {
 function handleTambahBarangSubmit(e) {
   e.preventDefault();
   const nama = document.getElementById("tambahNama").value.trim();
-  const satuan = document.getElementById("tambahSatuan").value.trim();
+  // Validasi lapis ke-2: pastikan tidak ada angka atau spasi di awal/akhir
+  const satuan = document.getElementById("tambahSatuan").value.replace(/[^a-zA-Z\s]/g, '').trim();
   const stokAwal = parseInt(document.getElementById("tambahStokAwal").value, 10) || 0;
   const keterangan = document.getElementById("tambahKeterangan").value.trim() || "Barang baru";
 
-  if (!nama || !satuan) return showToast("Nama dan satuan wajib diisi!", "danger");
+  if (!nama || !satuan) return showToast("Nama dan satuan (Hanya Huruf) wajib diisi!", "danger");
 
   const maxId = AppState.items.reduce((max, it) => Math.max(max, it.id || 0), 0);
   const newItem = { id: maxId + 1, nama: nama, masuk: stokAwal, keluar: 0, satuan: satuan, sisa: stokAwal, status: stokAwal <= 0 ? "Habis" : (stokAwal <= 5 ? "Menipis" : "Tersedia") };
@@ -657,11 +654,13 @@ function handleEditSubmit(e) {
   e.preventDefault();
   const id = parseInt(document.getElementById("editId").value, 10);
   const nama = document.getElementById("editNama").value.trim();
-  const satuan = document.getElementById("editSatuan").value.trim();
+  // Validasi lapis ke-2
+  const satuan = document.getElementById("editSatuan").value.replace(/[^a-zA-Z\s]/g, '').trim();
   const masuk = parseInt(document.getElementById("editMasuk").value, 10);
   const keluar = parseInt(document.getElementById("editKeluar").value, 10);
   const keterangan = document.getElementById("editKeterangan").value.trim();
 
+  if (!satuan) return showToast("Satuan hanya boleh berisi huruf!", "danger");
   if (isNaN(masuk) || isNaN(keluar) || masuk < 0 || keluar < 0) return showToast("Nilai masuk dan keluar harus angka valid!", "danger");
 
   const item = AppState.items.find((i) => i.id === id);
