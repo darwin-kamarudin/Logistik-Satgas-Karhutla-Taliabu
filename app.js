@@ -1,6 +1,6 @@
 /**
  * APP.JS - SISTEM LOGISTIK SATGAS KARHUTLA KAB. PULAU TALIABU
- * Update: Perbaikan Background Sync, Optimistic UI, Pagination, & Mobile Action Expansion
+ * Update: Background Sync, Optimistic UI, Pagination, Mobile Action, & Input Validations
  */
 
 const DEFAULT_INVENTORY = [
@@ -94,7 +94,37 @@ function initApp() {
   }
 }
 
+// Fungsi Bantuan Keterangan Dinamis Masuk/Keluar
+function updateTransaksiHint(jenis) {
+  const hintBox = document.getElementById("transaksiHint");
+  if (jenis === "KELUAR") {
+    hintBox.innerHTML = "<strong>💡 Keterangan KELUAR:</strong> Stok atau barang yang <strong>disalurkan</strong> untuk bantuan. (Harap sesuaikan dan tulis tujuan penyaluran di kolom keterangan bawah).";
+    hintBox.style.background = "#fff1f2";
+    hintBox.style.borderColor = "#fecdd3";
+    hintBox.style.color = "#9f1239";
+  } else {
+    hintBox.innerHTML = "<strong>💡 Keterangan MASUK:</strong> Jumlah stok barang yang <strong>bertambah</strong> bersumber dari sumbangsih relawan, donasi posko, dan sejenisnya.";
+    hintBox.style.background = "#eff6ff";
+    hintBox.style.borderColor = "#bfdbfe";
+    hintBox.style.color = "#1e40af";
+  }
+}
+
 function setupEventListeners() {
+  // Blok input angka untuk field SATUAN secara real-time
+  const stripNumbers = function (e) {
+    this.value = this.value.replace(/[0-9]/g, '');
+  };
+  document.getElementById("tambahSatuan").addEventListener("input", stripNumbers);
+  document.getElementById("editSatuan").addEventListener("input", stripNumbers);
+
+  // Ubah keterangan saat radio button transaksi berubah
+  document.querySelectorAll('input[name="transaksiJenis"]').forEach(radio => {
+    radio.addEventListener('change', function(e) {
+      updateTransaksiHint(e.target.value);
+    });
+  });
+
   document.getElementById("searchInput").addEventListener("input", function (e) {
     AppState.filter.search = e.target.value.toLowerCase().trim();
     AppState.pagination.page = 1;
@@ -226,7 +256,7 @@ function updateAdminUI() {
   const btnAdminToggle = document.getElementById("btnAdminToggle");
 
   if (AppState.isAdmin) {
-    document.body.classList.add("admin-active"); // CSS marker untuk mode mobile
+    document.body.classList.add("admin-active"); 
     adminBanner.classList.add("active");
     btnTambah.style.display = "inline-flex";
     if (thAction) thAction.style.display = "table-cell";
@@ -421,7 +451,6 @@ function renderTable() {
     let nameCellAttrs = "";
 
     if (AppState.isAdmin) {
-      // Tombol aksi ditambahkan event.stopPropagation() agar klik tidak memicu collapse baris di mobile
       const actionButtons = `
         <button class="btn-icon-action in-btn" title="Masuk (+)" onclick="event.stopPropagation(); openTransaksiModal(${item.id}, 'MASUK')">📥</button>
         <button class="btn-icon-action out-btn" title="Keluar (-)" onclick="event.stopPropagation(); openTransaksiModal(${item.id}, 'KELUAR')">📤</button>
@@ -478,6 +507,7 @@ window.openTransaksiModal = function (itemId, jenis) {
   document.getElementById("transaksiKeterangan").value = "";
 
   document.getElementById(jenis === "KELUAR" ? "typeKeluar" : "typeMasuk").checked = true;
+  updateTransaksiHint(jenis); // Tampilkan keterangan pertama kali dibuka
   openModal("modalTransaksi");
   setTimeout(() => document.getElementById("transaksiJumlah").focus(), 100);
 };
