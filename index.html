@@ -174,7 +174,7 @@
     </section>
   </main>
 
-  <!-- Section Galeri Dokumentasi dengan Paginasi / Slider -->
+  <!-- Section Galeri Dokumentasi -->
   <div class="container" id="galleryWrapper" style="display:none;">
     <section class="dashboard-card gallery-section" style="margin-top: 0.5rem;">
       <div class="toolbar" style="border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
@@ -210,7 +210,7 @@
       </div>
       <form id="formUpload" style="position: relative;">
         
-        <!-- Animasi Loading Upload (Menutupi body saat upload berjalan) -->
+        <!-- Animasi Loading -->
         <div id="uploadLoadingOverlay" style="display:none; position:absolute; inset:0; background:rgba(255,255,255,0.92); z-index:10; flex-direction:column; align-items:center; justify-content:center;">
           <div class="spinner"></div>
           <p style="margin-top:1.2rem; font-weight:800; color:var(--primary); font-size:1.1rem;">Mengunggah & Menyimpan...</p>
@@ -241,57 +241,93 @@
     </div>
   </div>
 
-  <!-- Modal Transaksi Stok -->
-  <div id="modalTransaksi" class="modal-backdrop">
+  <!-- 1. Modal KHUSUS Barang Masuk -->
+  <div id="modalMasuk" class="modal-backdrop">
     <div class="modal-dialog">
       <div class="modal-header">
-        <h3 class="modal-title">📦 Catat Transaksi Mutasi</h3>
-        <button class="modal-close" data-close="modalTransaksi">&times;</button>
+        <h3 class="modal-title">📥 Catat Barang Masuk</h3>
+        <button class="modal-close" data-close="modalMasuk">&times;</button>
       </div>
-      <form id="formTransaksi">
+      <form id="formMasuk">
         <div class="modal-body">
-          <input type="hidden" id="transaksiItemId">
-          <div class="radio-cards">
-            <div class="radio-card">
-              <input type="radio" id="typeMasuk" name="transaksiJenis" value="MASUK" checked>
-              <label for="typeMasuk" class="radio-card-label type-masuk">📥 MASUK</label>
-            </div>
-            <div class="radio-card">
-              <input type="radio" id="typeKeluar" name="transaksiJenis" value="KELUAR">
-              <label for="typeKeluar" class="radio-card-label type-keluar">📤 KELUAR</label>
-            </div>
-          </div>
+          <input type="hidden" id="masukItemId">
           
-          <div id="transaksiHint" class="form-hint" style="margin-bottom:1.15rem; padding:0.65rem; border:1px solid transparent; border-radius:6px; line-height:1.4;">
-            <!-- Konten diisi via JS -->
+          <div class="form-hint" style="margin-bottom:1.15rem; padding:0.65rem; border:1px solid #bfdbfe; border-radius:6px; background:#eff6ff; color:#1e40af; line-height:1.4;">
+            <strong>💡 Keterangan MASUK:</strong> Stok barang yang <strong>bertambah</strong> (bersumber dari sumbangsih relawan, donasi, dsb).
           </div>
 
           <div class="form-group">
             <label class="form-label">Nama Barang</label>
-            <input type="text" id="transaksiNama" class="form-control" readonly style="background:#f1f5f9; font-weight:700;">
+            <input type="text" id="masukNama" class="form-control" readonly style="background:#f1f5f9; font-weight:700;">
           </div>
           <div class="form-row">
             <div class="form-group">
               <label class="form-label">Sisa di Gudang</label>
-              <div id="transaksiSisaBadge" class="form-control" style="background:#f8fafc; font-weight:700;">0</div>
+              <div id="masukSisaBadge" class="form-control" style="background:#f8fafc; font-weight:700;">0</div>
             </div>
             <div class="form-group">
-              <label class="form-label">Jumlah Mutasi <span class="required">*</span></label>
-              <input type="number" id="transaksiJumlah" class="form-control" min="1" required placeholder="0">
+              <label class="form-label">Jumlah Masuk <span class="required">*</span></label>
+              <input type="number" id="masukJumlah" class="form-control" min="1" required placeholder="0">
             </div>
           </div>
           <div class="form-group">
-            <label class="form-label">Keterangan / Penerima Tujuan</label>
-            <input type="text" id="transaksiKeterangan" class="form-control" placeholder="Contoh: Bantuan relawan / Penyaluran ke Desa X">
+            <label class="form-label">Sumber Donasi / Keterangan</label>
+            <input type="text" id="masukKeterangan" class="form-control" placeholder="Contoh: Bantuan dari Bapak X">
           </div>
           <div class="form-group">
             <label class="form-label">Nama Petugas <span class="required">*</span></label>
-            <input type="text" id="transaksiPetugas" class="form-control" required placeholder="Nama Anda">
+            <input type="text" id="masukPetugas" class="form-control" required placeholder="Nama Anda">
           </div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-outline" data-close="modalTransaksi">Batal</button>
-          <button type="submit" id="btnSubmitTransaksi" class="btn btn-primary">Simpan Transaksi</button>
+          <button type="button" class="btn btn-outline" data-close="modalMasuk">Batal</button>
+          <button type="submit" id="btnSubmitMasuk" class="btn btn-primary">Simpan Barang Masuk</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 2. Modal KHUSUS Barang Keluar -->
+  <div id="modalKeluar" class="modal-backdrop">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 class="modal-title">📤 Catat Barang Keluar</h3>
+        <button class="modal-close" data-close="modalKeluar">&times;</button>
+      </div>
+      <form id="formKeluar">
+        <div class="modal-body">
+          <input type="hidden" id="keluarItemId">
+          
+          <div class="form-hint" style="margin-bottom:1.15rem; padding:0.65rem; border:1px solid #fecdd3; border-radius:6px; background:#fff1f2; color:#9f1239; line-height:1.4;">
+            <strong>💡 Keterangan KELUAR:</strong> Stok atau barang yang <strong>disalurkan</strong> untuk bantuan. (Harap tulis tujuan penyaluran).
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Nama Barang</label>
+            <input type="text" id="keluarNama" class="form-control" readonly style="background:#f1f5f9; font-weight:700;">
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Sisa di Gudang</label>
+              <div id="keluarSisaBadge" class="form-control" style="background:#f8fafc; font-weight:700;">0</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Jumlah Keluar <span class="required">*</span></label>
+              <input type="number" id="keluarJumlah" class="form-control" min="1" required placeholder="0">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Tujuan Penyaluran / Penerima <span class="required">*</span></label>
+            <input type="text" id="keluarKeterangan" class="form-control" required placeholder="Contoh: Penyaluran ke Desa X">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Nama Petugas <span class="required">*</span></label>
+            <input type="text" id="keluarPetugas" class="form-control" required placeholder="Nama Anda">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" data-close="modalKeluar">Batal</button>
+          <button type="submit" id="btnSubmitKeluar" class="btn btn-danger">Simpan Barang Keluar</button>
         </div>
       </form>
     </div>
