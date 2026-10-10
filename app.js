@@ -1,6 +1,6 @@
 /**
  * APP.JS - SISTEM LOGISTIK SATGAS KARHUTLA KAB. PULAU TALIABU
- * Update: Perbaikan Background Sync, Optimistic UI & Pagination Feature
+ * Update: Perbaikan Background Sync, Optimistic UI, Pagination, & Mobile Action Expansion
  */
 
 const DEFAULT_INVENTORY = [
@@ -59,10 +59,7 @@ const AppState = {
   items: [],
   logs: JSON.parse(localStorage.getItem("satgas_local_logs") || "[]"),
   filter: { search: "", status: "ALL", satuan: "ALL", sort: "id_asc" },
-  
-  // [TAMBAHAN: Variabel status pagination]
   pagination: { page: 1, limit: 20 },
-  
   isLoading: false,
   isLive: false
 };
@@ -98,7 +95,6 @@ function initApp() {
 }
 
 function setupEventListeners() {
-  // [TAMBAHAN: Reset halaman ke-1 setiap kali filter/pencarian diubah]
   document.getElementById("searchInput").addEventListener("input", function (e) {
     AppState.filter.search = e.target.value.toLowerCase().trim();
     AppState.pagination.page = 1;
@@ -120,20 +116,17 @@ function setupEventListeners() {
     renderTable();
   });
 
-  // [TAMBAHAN: Event listener untuk kontrol UI pagination]
   document.getElementById("itemsPerPage").addEventListener("change", function (e) {
     AppState.pagination.limit = parseInt(e.target.value);
-    AppState.pagination.page = 1; // Reset halaman tiap ubah batasan
+    AppState.pagination.page = 1; 
     renderTable();
   });
-
   document.getElementById("btnPrevPage").addEventListener("click", function () {
     if (AppState.pagination.page > 1) {
       AppState.pagination.page--;
       renderTable();
     }
   });
-
   document.getElementById("btnNextPage").addEventListener("click", function () {
     AppState.pagination.page++;
     renderTable();
@@ -233,15 +226,17 @@ function updateAdminUI() {
   const btnAdminToggle = document.getElementById("btnAdminToggle");
 
   if (AppState.isAdmin) {
+    document.body.classList.add("admin-active"); // CSS marker untuk mode mobile
     adminBanner.classList.add("active");
     btnTambah.style.display = "inline-flex";
-    thAction.style.display = "table-cell";
+    if (thAction) thAction.style.display = "table-cell";
     btnAdminToggle.textContent = "🚪 Keluar";
     btnAdminToggle.classList.replace("btn-primary", "btn-secondary");
   } else {
+    document.body.classList.remove("admin-active");
     adminBanner.classList.remove("active");
     btnTambah.style.display = "none";
-    thAction.style.display = "none";
+    if (thAction) thAction.style.display = "none";
     btnAdminToggle.textContent = "🔒 Mode Petugas";
     btnAdminToggle.classList.replace("btn-secondary", "btn-primary");
   }
@@ -394,22 +389,17 @@ function renderTable() {
     return 0;
   });
 
-  // [TAMBAHAN: Logika dan Pemotongan Data untuk Pagination]
   const totalItems = filtered.length;
   const totalPages = Math.ceil(totalItems / AppState.pagination.limit) || 1;
   
-  // Pastikan halaman tidak lebih besar dari total halaman tersedia (misal saat hapus baris terakhir di halaman akhir)
   if (AppState.pagination.page > totalPages) {
     AppState.pagination.page = totalPages;
   }
-  
+
   const startIndex = (AppState.pagination.page - 1) * AppState.pagination.limit;
   const endIndex = startIndex + AppState.pagination.limit;
-  
-  // Mengambil sebagian data sesuai limit halaman
   const paginatedItems = filtered.slice(startIndex, endIndex);
 
-  // Update label keterangan yang ditampilkan
   document.getElementById("lblShowingCount").textContent = paginatedItems.length;
   document.getElementById("pageInfo").textContent = `Hal ${AppState.pagination.page} dari ${totalPages}`;
   document.getElementById("btnPrevPage").disabled = AppState.pagination.page === 1;
@@ -417,7 +407,6 @@ function renderTable() {
 
   emptyState.style.display = totalItems === 0 ? "block" : "none";
 
-  // [UBAH: Gunakan data yang telah dipotong (paginatedItems) bukan 'filtered']
   paginatedItems.forEach(function (item) {
     const tr = document.createElement("tr");
     const sisa = item.masuk - item.keluar;
@@ -427,29 +416,51 @@ function renderTable() {
                       sisa <= 5 ? '<span class="badge badge-warning">Menipis</span>' :
                                   '<span class="badge badge-success">Tersedia</span>';
 
-    let actionCell = "";
+    let desktopActionCell = "";
+    let mobileActionBlock = "";
+    let nameCellAttrs = "";
+
     if (AppState.isAdmin) {
-      actionCell = `
-        <td style="text-align:center;">
-          <div class="action-buttons-group">
-            <button class="btn-icon-action in-btn" title="Masuk (+)" onclick="openTransaksiModal(${item.id}, 'MASUK')">📥</button>
-            <button class="btn-icon-action out-btn" title="Keluar (-)" onclick="openTransaksiModal(${item.id}, 'KELUAR')">📤</button>
-            <button class="btn-icon-action edit-btn" title="Edit" onclick="openEditModal(${item.id})">✏️</button>
-            <button class="btn-icon-action del-btn" title="Hapus" onclick="hapusBarang(${item.id})">🗑️</button>
-          </div>
+      // Tombol aksi ditambahkan event.stopPropagation() agar klik tidak memicu collapse baris di mobile
+      const actionButtons = `
+        <button class="btn-icon-action in-btn" title="Masuk (+)" onclick="event.stopPropagation(); openTransaksiModal(${item.id}, 'MASUK')">📥</button>
+        <button class="btn-icon-action out-btn" title="Keluar (-)" onclick="event.stopPropagation(); openTransaksiModal(${item.id}, 'KELUAR')">📤</button>
+        <button class="btn-icon-action edit-btn" title="Edit" onclick="event.stopPropagation(); openEditModal(${item.id})">✏️</button>
+        <button class="btn-icon-action del-btn" title="Hapus" onclick="event.stopPropagation(); hapusBarang(${item.id})">🗑️</button>
+      `;
+
+      desktopActionCell = `
+        <td class="col-action" style="text-align:center;">
+          <div class="action-buttons-group">${actionButtons}</div>
         </td>
       `;
+
+      mobileActionBlock = `
+        <div class="mobile-action-bar">
+          <div class="action-buttons-group" style="justify-content: flex-start; gap: 0.4rem; width: 100%;">
+            ${actionButtons}
+          </div>
+        </div>
+      `;
+
+      nameCellAttrs = `onclick="this.parentElement.classList.toggle('row-expanded')"`;
     }
 
     tr.innerHTML = `
       <td class="col-num">${item.id}</td>
-      <td class="col-name">${escapeHtml(item.nama)}</td>
+      <td class="col-name" ${nameCellAttrs}>
+        <div style="display:flex; align-items:center; justify-content:space-between; width:100%;">
+          <span>${escapeHtml(item.nama)}</span>
+          ${AppState.isAdmin ? `<span class="mobile-tap-hint"></span>` : ""}
+        </div>
+        ${mobileActionBlock}
+      </td>
       <td class="col-qty" style="text-align:right;">${item.masuk.toLocaleString("id-ID")}</td>
       <td class="col-qty" style="text-align:right; color:var(--primary);">${item.keluar.toLocaleString("id-ID")}</td>
       <td class="col-qty" style="text-align:right; font-weight:800;">${sisa.toLocaleString("id-ID")}</td>
       <td><span class="unit-tag">${escapeHtml(item.satuan)}</span></td>
       <td>${statusBadge}</td>
-      ${actionCell}
+      ${desktopActionCell}
     `;
     tbody.appendChild(tr);
   });
@@ -612,10 +623,7 @@ window.hapusBarang = function (itemId) {
   AppState.items = AppState.items.filter((i) => i.id !== itemId);
   saveLocalItems();
   populateSatuanFilter();
-  
-  // [TAMBAHAN: Cek agar jika yang dihapus satu2nya di halaman terakhir, kita kembali ke hal sebelumnya]
-  renderDashboard(); 
-  
+  renderDashboard();
   showToast(`Barang "${item.nama}" telah dihapus!`, "warning");
 
   // 2. Kirim ke Server di Latar Belakang
@@ -683,7 +691,7 @@ function openModal(id) {
   const modal = document.getElementById(id);
   if (modal) {
     modal.classList.add("open");
-    document.body.style.overflow = "hidden";
+    document.body.style.overflow = "hidden"; 
   }
 }
 
