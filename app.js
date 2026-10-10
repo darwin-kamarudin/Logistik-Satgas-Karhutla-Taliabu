@@ -489,6 +489,24 @@ function renderTable() {
   });
 }
 
+// Tampilkan tanggal dokumentasi tanpa jam, contoh: "11 Oktober 2026"
+function formatTanggalDokumentasi(raw) {
+  if (!raw) return "";
+  const str = String(raw).trim();
+  const bulan = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+
+  // Format dari server: "2026-10-11 17:25:31" (sudah WIT) -> ambil bagian tanggalnya langsung
+  const m = str.match(/^(\d{4})-(\d{2})-(\d{2})(?:\s|$)/);
+  if (m) return parseInt(m[3], 10) + " " + bulan[parseInt(m[2], 10) - 1] + " " + m[1];
+
+  // Cadangan: format ISO/UTC atau format lain yang bisa dibaca browser
+  const dt = new Date(str);
+  if (!isNaN(dt.getTime())) {
+    return dt.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Jayapura" });
+  }
+  return str;
+}
+
 function getDriveDirectUrl(url) {
   if (!url) return '';
   const match = url.match(/[-\w]{25,}/);
@@ -546,7 +564,7 @@ function renderGallery() {
     card.className = "gallery-card";
     
     const imageUrl = getDriveDirectUrl(foto.urlDrive);
-    const tanggalHtml = foto.tanggal ? `<div class="gallery-date">${escapeHtml(foto.tanggal)}</div>` : '';
+    const tanggalHtml = foto.tanggal ? `<div class="gallery-date">${escapeHtml(formatTanggalDokumentasi(foto.tanggal))}</div>` : '';
     
     card.innerHTML = `
       <div class="gallery-img-wrapper">
