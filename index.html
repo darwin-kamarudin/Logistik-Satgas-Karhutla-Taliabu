@@ -155,7 +155,6 @@
         </div>
       </div>
 
-      <!-- Footer Tabel Pagination -->
       <div class="table-footer" style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem;">
         <div>Menampilkan <strong id="lblShowingCount">0</strong> dari <strong id="lblTotalCount">0</strong> barang</div>
         
@@ -175,11 +174,72 @@
     </section>
   </main>
 
+  <!-- Section Galeri Dokumentasi dengan Paginasi / Slider -->
+  <div class="container" id="galleryWrapper" style="display:none;">
+    <section class="dashboard-card gallery-section" style="margin-top: 0.5rem;">
+      <div class="toolbar" style="border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+        <h3 style="font-size: 1.1rem; color: var(--text-main); display: flex; align-items: center; gap: 0.5rem;">📸 Dokumentasi Lapangan</h3>
+        
+        <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+          <div id="galleryControls" style="display:none; align-items:center; gap:0.5rem; background: var(--bg-page); padding: 0.2rem 0.5rem; border-radius: var(--radius-sm); border: 1px solid var(--border);">
+            <button id="btnGalPrev" class="btn btn-outline btn-sm" style="min-width:32px; padding:0.2rem;">❮</button>
+            <span id="galPageInfo" style="font-size:0.75rem; font-weight:700; min-width: 35px; text-align:center;">1/1</span>
+            <button id="btnGalNext" class="btn btn-outline btn-sm" style="min-width:32px; padding:0.2rem;">❯</button>
+          </div>
+          <button id="btnBukaUpload" class="btn btn-primary btn-sm" style="display: none;">➕ Unggah</button>
+        </div>
+      </div>
+      <div class="gallery-grid" id="galleryGrid">
+        <!-- Render Otomatis via JS -->
+      </div>
+    </section>
+  </div>
+
   <footer class="app-footer">
     <div class="container">
       Code by: <a href="https://github.com/darwin-kamarudin" target="_blank" rel="noopener noreferrer">Darwin Kamarudin</a>
     </div>
   </footer>
+
+  <!-- Modal Upload Foto Dokumentasi -->
+  <div id="modalUpload" class="modal-backdrop">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 class="modal-title">📸 Unggah Dokumentasi</h3>
+        <button class="modal-close" data-close="modalUpload">&times;</button>
+      </div>
+      <form id="formUpload" style="position: relative;">
+        
+        <!-- Animasi Loading Upload (Menutupi body saat upload berjalan) -->
+        <div id="uploadLoadingOverlay" style="display:none; position:absolute; inset:0; background:rgba(255,255,255,0.92); z-index:10; flex-direction:column; align-items:center; justify-content:center;">
+          <div class="spinner"></div>
+          <p style="margin-top:1.2rem; font-weight:800; color:var(--primary); font-size:1.1rem;">Mengunggah & Menyimpan...</p>
+          <p style="font-size:0.8rem; color:var(--text-muted); text-align:center; padding: 0 1.5rem; margin-top:0.5rem;">Harap tunggu dan jangan tutup halaman ini. Kecepatan bergantung pada besarnya ukuran foto dan koneksi internet Anda.</p>
+        </div>
+
+        <div class="modal-body">
+          <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:1rem;">Upload foto dokumentasi penyaluran logistik atau kegiatan di lapangan. (Maks 5MB)</p>
+          
+          <div class="form-group">
+            <label class="form-label">Pilih Foto / Ambil Gambar <span class="required">*</span></label>
+            <input type="file" id="uploadFile" class="form-control" accept="image/*" capture="environment" required style="padding: 0.4rem;">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Keterangan / Kegiatan <span class="required">*</span></label>
+            <input type="text" id="uploadKeterangan" class="form-control" required placeholder="Contoh: Penyaluran logistik di Desa X">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Nama Relawan / Petugas <span class="required">*</span></label>
+            <input type="text" id="uploadPetugas" class="form-control" required placeholder="Nama Anda">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" data-close="modalUpload">Batal</button>
+          <button type="submit" id="btnSubmitUpload" class="btn btn-primary">Unggah & Simpan</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
   <!-- Modal Transaksi Stok -->
   <div id="modalTransaksi" class="modal-backdrop">
@@ -202,7 +262,6 @@
             </div>
           </div>
           
-          <!-- Keterangan Dinamis Masuk/Keluar -->
           <div id="transaksiHint" class="form-hint" style="margin-bottom:1.15rem; padding:0.65rem; border:1px solid transparent; border-radius:6px; line-height:1.4;">
             <!-- Konten diisi via JS -->
           </div>
@@ -254,7 +313,6 @@
           <div class="form-row">
             <div class="form-group">
               <label class="form-label">Satuan <span class="required">*</span></label>
-              <!-- Validasi Pattern agar hanya Huruf -->
               <input type="text" id="tambahSatuan" class="form-control" required placeholder="Hanya huruf (contoh: Dos, Karung)" pattern="[A-Za-z\s]+" title="Tidak boleh berisi angka. Gunakan huruf seperti Dos, Karung, Pak.">
             </div>
             <div class="form-group">
@@ -291,7 +349,6 @@
           </div>
           <div class="form-group">
             <label class="form-label">Satuan <span class="required">*</span></label>
-            <!-- Validasi Pattern agar hanya Huruf -->
             <input type="text" id="editSatuan" class="form-control" required pattern="[A-Za-z\s]+" title="Tidak boleh berisi angka. Gunakan huruf seperti Dos, Karung, Pak.">
           </div>
           <div class="form-row">
@@ -376,7 +433,7 @@
 
   <!-- KONFIGURASI BACKEND API -->
   <script>
-    window.GAS_API_URL = "https://script.google.com/macros/s/AKfycby8vbAZ2usUuusFOKaU0ORD1CUm-20gg-Q05eFOxa80ZcXEj2ZDbATtoBIpUdhIv4MW/exec";
+    window.GAS_API_URL = "https://script.google.com/macros/s/AKfycbz0SPC5_V9IhrRXvnaHFJ7QxzM9woin5to9Y9pc6t1ymMcKRz8GsDTwjo5aX1lPGRaE/exec";
   </script>
   <script src="app.js"></script>
 </body>
