@@ -17,7 +17,7 @@ dashboard_satgas_karhutla/
 ├── style.css         # Styling modern, tema kebencanaan/karhutla, cetak & mobile-ready
 ├── app.js            # Logika frontend, state management, filter/sort, koneksi API GAS
 ├── Code.gs           # Kode backend Google Apps Script (API Web App & Database Handler)
-└── README.md         # Panduan instalasi dan operasional lengkap
+└── README.md         # Informasi Ringkas Tentang Aplikasi ini
 ```
 
 ---
