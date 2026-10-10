@@ -309,7 +309,7 @@ body {
 .search-input {
   width: 100%;
   padding: 0.6rem 0.85rem 0.6rem 2.2rem;
-  font-size: 0.95rem; /* Mencegah auto-zoom iOS */
+  font-size: 0.95rem; 
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background-color: #ffffff;
@@ -566,7 +566,7 @@ body {
 .form-control {
   width: 100%;
   padding: 0.6rem 0.75rem;
-  font-size: 1rem; /* Mencegah zoom browser di iOS/Android */
+  font-size: 1rem; 
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: #ffffff;
@@ -722,7 +722,70 @@ body {
   }
 }
 
-/* Letakkan ini di baris paling akhir style.css */
+/* =========================================================
+   UI AKSI MOBILE (TAP TO EXPAND)
+   ========================================================= */
+.mobile-action-bar {
+  display: none;
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--border);
+  width: 100%;
+}
+
+.mobile-tap-hint {
+  display: none;
+  font-size: 0.65rem;
+  color: var(--accent);
+  background: #eff6ff;
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+@media (max-width: 767px) {
+  /* Sembunyikan kolom action utama di HP */
+  body.admin-active #thAction,
+  body.admin-active .col-action {
+    display: none !important;
+  }
+
+  /* Buat sel nama bisa diklik */
+  body.admin-active .col-name {
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body.admin-active .mobile-tap-hint {
+    display: inline-block;
+  }
+
+  /* Tampilkan bar aksi saat baris diperluas (diklik) */
+  body.admin-active tr.row-expanded .mobile-action-bar {
+    display: flex;
+    animation: fadeInDown 0.2s ease forwards;
+  }
+
+  /* Ubah gaya tombol saat terbuka */
+  body.admin-active tr.row-expanded .mobile-tap-hint {
+    background: #fee2e2;
+    color: var(--danger);
+  }
+
+  body.admin-active tr.row-expanded .mobile-tap-hint::before {
+    content: "Tutup ✕";
+  }
+
+  body.admin-active tr:not(.row-expanded) .mobile-tap-hint::before {
+    content: "Aksi ⚙️";
+  }
+}
+
+@keyframes fadeInDown {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 
 /* Footer Credit */
 .app-footer {
@@ -745,7 +808,6 @@ body {
   text-decoration: underline;
 }
 
-/* Timpa blok @media print lama dengan yang ini (ada tambahan .app-footer) */
 @media print {
   .header-actions, .toolbar, .btn, .admin-mode-banner, .toast-container, .app-footer {
     display: none !important;
