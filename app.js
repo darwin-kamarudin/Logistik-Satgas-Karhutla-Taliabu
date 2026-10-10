@@ -1,6 +1,6 @@
 /**
  * APP.JS - SISTEM LOGISTIK SATGAS KARHUTLA KAB. PULAU TALIABU
- * Update: Perbaikan Background Sync & Optimistic UI
+ * Update: Perbaikan Background Sync, Optimistic UI & Pagination Feature
  */
 
 const DEFAULT_INVENTORY = [
@@ -59,6 +59,10 @@ const AppState = {
   items: [],
   logs: JSON.parse(localStorage.getItem("satgas_local_logs") || "[]"),
   filter: { search: "", status: "ALL", satuan: "ALL", sort: "id_asc" },
+  
+  // [TAMBAHAN: Variabel status pagination]
+  pagination: { page: 1, limit: 20 },
+  
   isLoading: false,
   isLive: false
 };
@@ -94,20 +98,44 @@ function initApp() {
 }
 
 function setupEventListeners() {
+  // [TAMBAHAN: Reset halaman ke-1 setiap kali filter/pencarian diubah]
   document.getElementById("searchInput").addEventListener("input", function (e) {
     AppState.filter.search = e.target.value.toLowerCase().trim();
+    AppState.pagination.page = 1;
     renderTable();
   });
   document.getElementById("filterStatus").addEventListener("change", function (e) {
     AppState.filter.status = e.target.value;
+    AppState.pagination.page = 1;
     renderTable();
   });
   document.getElementById("filterSatuan").addEventListener("change", function (e) {
     AppState.filter.satuan = e.target.value;
+    AppState.pagination.page = 1;
     renderTable();
   });
   document.getElementById("sortOption").addEventListener("change", function (e) {
     AppState.filter.sort = e.target.value;
+    AppState.pagination.page = 1;
+    renderTable();
+  });
+
+  // [TAMBAHAN: Event listener untuk kontrol UI pagination]
+  document.getElementById("itemsPerPage").addEventListener("change", function (e) {
+    AppState.pagination.limit = parseInt(e.target.value);
+    AppState.pagination.page = 1; // Reset halaman tiap ubah batasan
+    renderTable();
+  });
+
+  document.getElementById("btnPrevPage").addEventListener("click", function () {
+    if (AppState.pagination.page > 1) {
+      AppState.pagination.page--;
+      renderTable();
+    }
+  });
+
+  document.getElementById("btnNextPage").addEventListener("click", function () {
+    AppState.pagination.page++;
     renderTable();
   });
 
@@ -184,7 +212,6 @@ function setupEventListeners() {
   document.getElementById("formTransaksi").addEventListener("submit", handleTransaksiSubmit);
   document.getElementById("formEdit").addEventListener("submit", handleEditSubmit);
 
-  // Fungsi dinamis untuk semua tombol Batal / Close Modal
   document.querySelectorAll("[data-close]").forEach(function (btn) {
     btn.addEventListener("click", function (e) {
       e.preventDefault();
@@ -234,7 +261,6 @@ async function fetchFromGAS() {
   setLoading(true);
   updateConnectionStatus(false, "Menghubungkan...");
   
-  // Cache busting untuk mencegah browser menampilkan data basi
   const noCacheUrl = AppState.gasUrl + "?action=read&t=" + new Date().getTime();
   
   try {
@@ -269,7 +295,6 @@ async function sendActionToGAS(payload) {
   }
   
   try {
-    // Memaksa pengiriman parameter 'action' ke URL query sebagai fallback handal untuk Apps Script
     const targetUrl = AppState.gasUrl + "?action=" + encodeURIComponent(payload.action);
     
     const res = await fetch(targetUrl, {
@@ -298,16 +323,12 @@ async function sendActionToGAS(payload) {
   }
 }
 
-// FUNGSI SINKRONISASI LATAR BELAKANG
 function syncToGASBackground(payload) {
   if (!AppState.gasUrl || AppState.gasUrl.includes("YOUR_SCRIPT_ID_HERE")) return;
   
   sendActionToGAS(payload).then(res => {
     if (res && res.status === "error") {
       showToast("Peringatan Sinkronisasi: " + res.message, "danger");
-    } else if (res && res.status === "success") {
-      // Opsi: kita bisa fetch ulang dari server jika ingin sinkronisasi 2 arah otomatis di latar belakang
-      // fetchFromGAS();
     }
   }).catch(err => {
     console.warn("Background sync tertunda:", err);
@@ -373,10 +394,31 @@ function renderTable() {
     return 0;
   });
 
-  document.getElementById("lblShowingCount").textContent = filtered.length;
-  emptyState.style.display = filtered.length === 0 ? "block" : "none";
+  // [TAMBAHAN: Logika dan Pemotongan Data untuk Pagination]
+  const totalItems = filtered.length;
+  const totalPages = Math.ceil(totalItems / AppState.pagination.limit) || 1;
+  
+  // Pastikan halaman tidak lebih besar dari total halaman tersedia (misal saat hapus baris terakhir di halaman akhir)
+  if (AppState.pagination.page > totalPages) {
+    AppState.pagination.page = totalPages;
+  }
+  
+  const startIndex = (AppState.pagination.page - 1) * AppState.pagination.limit;
+  const endIndex = startIndex + AppState.pagination.limit;
+  
+  // Mengambil sebagian data sesuai limit halaman
+  const paginatedItems = filtered.slice(startIndex, endIndex);
 
-  filtered.forEach(function (item) {
+  // Update label keterangan yang ditampilkan
+  document.getElementById("lblShowingCount").textContent = paginatedItems.length;
+  document.getElementById("pageInfo").textContent = `Hal ${AppState.pagination.page} dari ${totalPages}`;
+  document.getElementById("btnPrevPage").disabled = AppState.pagination.page === 1;
+  document.getElementById("btnNextPage").disabled = AppState.pagination.page === totalPages;
+
+  emptyState.style.display = totalItems === 0 ? "block" : "none";
+
+  // [UBAH: Gunakan data yang telah dipotong (paginatedItems) bukan 'filtered']
+  paginatedItems.forEach(function (item) {
     const tr = document.createElement("tr");
     const sisa = item.masuk - item.keluar;
     if (sisa <= 0) tr.classList.add("highlight-empty");
@@ -570,7 +612,10 @@ window.hapusBarang = function (itemId) {
   AppState.items = AppState.items.filter((i) => i.id !== itemId);
   saveLocalItems();
   populateSatuanFilter();
-  renderDashboard();
+  
+  // [TAMBAHAN: Cek agar jika yang dihapus satu2nya di halaman terakhir, kita kembali ke hal sebelumnya]
+  renderDashboard(); 
+  
   showToast(`Barang "${item.nama}" telah dihapus!`, "warning");
 
   // 2. Kirim ke Server di Latar Belakang
@@ -638,7 +683,7 @@ function openModal(id) {
   const modal = document.getElementById(id);
   if (modal) {
     modal.classList.add("open");
-    document.body.style.overflow = "hidden"; // Mencegah scrolling latar belakang di mobile
+    document.body.style.overflow = "hidden";
   }
 }
 
