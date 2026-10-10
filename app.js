@@ -69,6 +69,7 @@ const AppState = {
 document.addEventListener("DOMContentLoaded", function () {
   initApp();
   setupEventListeners();
+  renderFooter();
 });
 
 function initApp() {
@@ -297,6 +298,52 @@ function updateAdminUI() {
   }
   
   renderGallery(); 
+}
+
+// ---------------------------------------------------------
+// FOOTER: identitas, logo, dan kontak Pemerintah Kabupaten Pulau Taliabu
+// Isi data lewat window.FOOTER_INFO di index.html (bagian kosong otomatis disembunyikan)
+// ---------------------------------------------------------
+function renderFooter() {
+  const info = window.FOOTER_INFO || {};
+  const yearEl = document.getElementById("footerYear");
+  if (yearEl) yearEl.textContent = new Date().getFullYear();
+
+  const isHttp = function (u) { return /^https?:\/\//i.test(String(u || "").trim()); };
+  const website = isHttp(info.website) ? String(info.website).trim() : "";
+
+  // Logo: bila gagal dimuat, tetap tampil ikon cadangan (tidak ada gambar rusak)
+  const logoLink = document.getElementById("footerLogoLink");
+  const logoImg = document.getElementById("footerLogoImg");
+  const logoFallback = document.getElementById("footerLogoFallback");
+  if (logoLink) { if (website) logoLink.setAttribute("href", website); else logoLink.removeAttribute("href"); }
+  if (logoImg && logoFallback && info.logoUrl) {
+    logoImg.onload = function () { logoImg.hidden = false; logoFallback.hidden = true; };
+    logoImg.onerror = function () { logoImg.hidden = true; logoFallback.hidden = false; };
+    logoImg.src = info.logoUrl;
+  }
+
+  const list = document.getElementById("footerContactList");
+  if (!list) return;
+  const icon = {
+    pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>',
+    globe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>',
+    phone: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>',
+    mail: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>'
+  };
+
+  const items = [];
+  if (info.alamat) items.push(icon.pin + "<span>" + escapeHtml(info.alamat) + "</span>");
+  if (website) items.push(icon.globe + '<a href="' + escapeHtml(website) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(website.replace(/^https?:\/\//i, "").replace(/\/$/, "")) + "</a>");
+  if (info.telepon) {
+    const tel = String(info.telepon).replace(/[^\d+]/g, "");
+    items.push(icon.phone + '<a href="tel:' + escapeHtml(tel) + '">' + escapeHtml(info.telepon) + "</a>");
+  }
+  if (info.email) items.push(icon.mail + '<a href="mailto:' + escapeHtml(info.email) + '">' + escapeHtml(info.email) + "</a>");
+
+  list.innerHTML = items.map(function (html) { return "<li>" + html + "</li>"; }).join("");
+  const contactBox = list.closest(".footer-contact");
+  if (contactBox) contactBox.style.display = items.length ? "" : "none";
 }
 
 function exitAdminMode() {
