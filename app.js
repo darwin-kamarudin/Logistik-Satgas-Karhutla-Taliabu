@@ -389,7 +389,7 @@ function renderKPI() {
   document.getElementById("statStokPerhatian").textContent = habisCount + menipisCount;
   document.getElementById("statStokPerhatianSub").textContent = habisCount + " Habis, " + menipisCount + " Menipis";
   document.getElementById("lblTotalCount").textContent = items.length;
-  document.getElementById("lblLastSync").textContent = new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + " WITA";
+  document.getElementById("lblLastSync").textContent = new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jayapura" }) + " WIT";
 }
 
 function renderTable() {
@@ -450,10 +450,17 @@ function renderTable() {
     let desktopActionCell = ""; let mobileActionBlock = ""; let nameCellAttrs = "";
 
     if (AppState.isAdmin) {
+      // Ikon SVG tebal & jelas (stroke-width 3.5) agar petugas langsung mengenali fungsi tombol
+      const svgAttr = 'width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" style="display:block; pointer-events:none;"';
+      const iconPlus  = `<svg ${svgAttr} stroke-width="3.5" aria-hidden="true"><line x1="12" y1="4" x2="12" y2="20"/><line x1="4" y1="12" x2="20" y2="12"/></svg>`;
+      const iconMinus = `<svg ${svgAttr} stroke-width="3.5" aria-hidden="true"><line x1="4" y1="12" x2="20" y2="12"/></svg>`;
+      const iconPencil = `<svg ${svgAttr} stroke-width="2.5" aria-hidden="true"><path d="M17 3a2.83 2.83 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/><line x1="14" y1="6" x2="18" y2="10"/></svg>`;
+      const btnBase = "display:inline-flex; align-items:center; justify-content:center; min-width:38px; min-height:38px;";
+
       const actionButtons = `
-        <button class="btn-icon-action in-btn" title="Masuk (+)" onclick="event.stopPropagation(); openMasukModal(${item.id})">📥</button>
-        <button class="btn-icon-action out-btn" title="Keluar (-)" onclick="event.stopPropagation(); openKeluarModal(${item.id})">📤</button>
-        <button class="btn-icon-action edit-btn" title="Edit" onclick="event.stopPropagation(); openEditModal(${item.id})">✏️</button>
+        <button class="btn-icon-action in-btn" title="Barang Masuk (Tambah)" aria-label="Barang Masuk (Tambah)" style="${btnBase} color:var(--success);" onclick="event.stopPropagation(); openMasukModal(${item.id})">${iconPlus}</button>
+        <button class="btn-icon-action out-btn" title="Barang Keluar (Kurang)" aria-label="Barang Keluar (Kurang)" style="${btnBase} color:var(--danger);" onclick="event.stopPropagation(); openKeluarModal(${item.id})">${iconMinus}</button>
+        <button class="btn-icon-action edit-btn" title="Edit" aria-label="Edit" style="${btnBase} color:var(--primary);" onclick="event.stopPropagation(); openEditModal(${item.id})">${iconPencil}</button>
         <button class="btn-icon-action del-btn" title="Hapus" onclick="event.stopPropagation(); hapusBarang(${item.id})">🗑️</button>
       `;
 
@@ -653,7 +660,12 @@ function handleTambahBarangSubmit(e) {
   AppState.items.push(newItem); saveLocalItems(); populateSatuanFilter(); renderDashboard(); closeModal("modalTambah");
   showToast(`Barang "${nama}" berhasil ditambah!`, "success");
 
-  syncToGASBackground({ action: "tambah", nama: nama, satuan: satuan, stokAwal: stokAwal, keterangan: keterangan, petugas: "Petugas Posko", pin: sessionStorage.getItem("satgas_session_pin") || "" });
+  // Setelah server membuat ID resmi, muat ulang data agar ID di layar sama dengan ID di Spreadsheet
+  const tambahPayload = { action: "tambah", nama: nama, satuan: satuan, stokAwal: stokAwal, keterangan: keterangan, petugas: "Petugas Posko", pin: sessionStorage.getItem("satgas_session_pin") || "" };
+  sendActionToGAS(tambahPayload).then(res => {
+    if (res && res.status === "error") showToast("Peringatan Sinkronisasi: " + res.message, "danger");
+    else if (res && res.status === "success") fetchFromGAS();
+  }).catch(err => { console.warn("Background sync tertunda:", err); });
 }
 
 window.openEditModal = function (itemId) {
@@ -679,6 +691,7 @@ function handleEditSubmit(e) {
 
   if (!satuan) return showToast("Satuan hanya boleh berisi huruf!", "danger");
   if (isNaN(masuk) || isNaN(keluar) || masuk < 0 || keluar < 0) return showToast("Nilai masuk dan keluar harus angka valid!", "danger");
+  if (keluar > masuk) return showToast("Total Keluar tidak boleh lebih besar dari Total Masuk!", "danger");
 
   const item = AppState.items.find((i) => i.id === id);
   if (!item) return;
