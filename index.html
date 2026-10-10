@@ -22,7 +22,7 @@
       <div class="header-actions">
         <div id="connectionStatus" class="status-pill status-demo">
           <span class="status-dot"></span>
-          <span id="connectionStatusText">db_cek...</span>
+          <span id="connectionStatusText">Menghubungkan...</span>
         </div>
         <button id="btnRefresh" class="btn btn-outline-white btn-sm" title="Muat Ulang Data">
           🔄 Segarkan
@@ -155,7 +155,7 @@
         </div>
       </div>
 
-      <!-- [TAMBAHAN: Footer Tabel yang dimodifikasi untuk menampung Pagination UI] -->
+      <!-- Footer Tabel Pagination -->
       <div class="table-footer" style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem;">
         <div>Menampilkan <strong id="lblShowingCount">0</strong> dari <strong id="lblTotalCount">0</strong> barang</div>
         
@@ -172,8 +172,6 @@
 
         <div>Sinkronisasi: <span id="lblLastSync">-</span></div>
       </div>
-      <!-- [AKHIR TAMBAHAN] -->
-
     </section>
   </main>
 
@@ -203,6 +201,12 @@
               <label for="typeKeluar" class="radio-card-label type-keluar">📤 KELUAR</label>
             </div>
           </div>
+          
+          <!-- Keterangan Dinamis Masuk/Keluar -->
+          <div id="transaksiHint" class="form-hint" style="margin-bottom:1.15rem; padding:0.65rem; border:1px solid transparent; border-radius:6px; line-height:1.4;">
+            <!-- Konten diisi via JS -->
+          </div>
+
           <div class="form-group">
             <label class="form-label">Nama Barang</label>
             <input type="text" id="transaksiNama" class="form-control" readonly style="background:#f1f5f9; font-weight:700;">
@@ -218,8 +222,8 @@
             </div>
           </div>
           <div class="form-group">
-            <label class="form-label">Keterangan / Penerima</label>
-            <input type="text" id="transaksiKeterangan" class="form-control" placeholder="Contoh: Tim Posko Lapangan Regu 1">
+            <label class="form-label">Keterangan / Penerima Tujuan</label>
+            <input type="text" id="transaksiKeterangan" class="form-control" placeholder="Contoh: Bantuan relawan / Penyaluran ke Desa X">
           </div>
           <div class="form-group">
             <label class="form-label">Nama Petugas <span class="required">*</span></label>
@@ -250,7 +254,8 @@
           <div class="form-row">
             <div class="form-group">
               <label class="form-label">Satuan <span class="required">*</span></label>
-              <input type="text" id="tambahSatuan" class="form-control" required placeholder="Dos / Karung / Pak">
+              <!-- Validasi Pattern agar hanya Huruf -->
+              <input type="text" id="tambahSatuan" class="form-control" required placeholder="Hanya huruf (contoh: Dos, Karung)" pattern="[A-Za-z\s]+" title="Tidak boleh berisi angka. Gunakan huruf seperti Dos, Karung, Pak.">
             </div>
             <div class="form-group">
               <label class="form-label">Stok Awal Masuk</label>
@@ -286,7 +291,8 @@
           </div>
           <div class="form-group">
             <label class="form-label">Satuan <span class="required">*</span></label>
-            <input type="text" id="editSatuan" class="form-control" required>
+            <!-- Validasi Pattern agar hanya Huruf -->
+            <input type="text" id="editSatuan" class="form-control" required pattern="[A-Za-z\s]+" title="Tidak boleh berisi angka. Gunakan huruf seperti Dos, Karung, Pak.">
           </div>
           <div class="form-row">
             <div class="form-group">
