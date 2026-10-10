@@ -1,6 +1,6 @@
 /**
  * APP.JS - SISTEM LOGISTIK SATGAS KARHUTLA KAB. PULAU TALIABU
- * Update: Image Fix, Upload Animation, Mobile Gallery Slider, Strict Text Validation
+ * Update: Image Fix (Thumbnail API), Upload Animation, Strict Text Validation & Separated Input Modals
  */
 
 const DEFAULT_INVENTORY = [
@@ -93,21 +93,6 @@ function initApp() {
   }
 }
 
-function updateTransaksiHint(jenis) {
-  const hintBox = document.getElementById("transaksiHint");
-  if (jenis === "KELUAR") {
-    hintBox.innerHTML = "<strong>💡 Keterangan KELUAR:</strong> Stok atau barang yang <strong>disalurkan</strong> untuk bantuan. (Harap sesuaikan dan tulis tujuan penyaluran di kolom keterangan bawah).";
-    hintBox.style.background = "#fff1f2";
-    hintBox.style.borderColor = "#fecdd3";
-    hintBox.style.color = "#9f1239";
-  } else {
-    hintBox.innerHTML = "<strong>💡 Keterangan MASUK:</strong> Jumlah stok barang yang <strong>bertambah</strong> bersumber dari sumbangsih relawan, donasi posko, dan sejenisnya.";
-    hintBox.style.background = "#eff6ff";
-    hintBox.style.borderColor = "#bfdbfe";
-    hintBox.style.color = "#1e40af";
-  }
-}
-
 function setupEventListeners() {
   // Lapis Pengamanan Tambahan untuk Satuan (Selain saat mengetik, juga saat data ditempel/paste)
   const stripNumbersAndSymbols = function (e) { 
@@ -115,10 +100,6 @@ function setupEventListeners() {
   };
   document.getElementById("tambahSatuan").addEventListener("input", stripNumbersAndSymbols);
   document.getElementById("editSatuan").addEventListener("input", stripNumbersAndSymbols);
-
-  document.querySelectorAll('input[name="transaksiJenis"]').forEach(radio => {
-    radio.addEventListener('change', function(e) { updateTransaksiHint(e.target.value); });
-  });
 
   document.getElementById("searchInput").addEventListener("input", function (e) {
     AppState.filter.search = e.target.value.toLowerCase().trim();
@@ -192,7 +173,8 @@ function setupEventListeners() {
   });
 
   document.getElementById("formTambah").addEventListener("submit", handleTambahBarangSubmit);
-  document.getElementById("formTransaksi").addEventListener("submit", handleTransaksiSubmit);
+  document.getElementById("formMasuk").addEventListener("submit", handleMasukSubmit);
+  document.getElementById("formKeluar").addEventListener("submit", handleKeluarSubmit);
   document.getElementById("formEdit").addEventListener("submit", handleEditSubmit);
 
   // ------------------------------------------
@@ -219,7 +201,6 @@ function setupEventListeners() {
     const submitBtn = document.getElementById("btnSubmitUpload");
     const loadingOverlay = document.getElementById("uploadLoadingOverlay");
     
-    // Nonaktifkan tombol & Munculkan overlay Spinner
     submitBtn.disabled = true; 
     loadingOverlay.style.display = "flex";
 
@@ -246,7 +227,6 @@ function setupEventListeners() {
       } catch (err) { 
         showToast("Terjadi kesalahan saat mengunggah foto.", "danger"); 
       } finally { 
-        // Tutup animasi overlay dan normalkan tombol
         submitBtn.disabled = false; 
         loadingOverlay.style.display = "none";
       }
@@ -471,8 +451,8 @@ function renderTable() {
 
     if (AppState.isAdmin) {
       const actionButtons = `
-        <button class="btn-icon-action in-btn" title="Masuk (+)" onclick="event.stopPropagation(); openTransaksiModal(${item.id}, 'MASUK')">📥</button>
-        <button class="btn-icon-action out-btn" title="Keluar (-)" onclick="event.stopPropagation(); openTransaksiModal(${item.id}, 'KELUAR')">📤</button>
+        <button class="btn-icon-action in-btn" title="Masuk (+)" onclick="event.stopPropagation(); openMasukModal(${item.id})">📥</button>
+        <button class="btn-icon-action out-btn" title="Keluar (-)" onclick="event.stopPropagation(); openKeluarModal(${item.id})">📤</button>
         <button class="btn-icon-action edit-btn" title="Edit" onclick="event.stopPropagation(); openEditModal(${item.id})">✏️</button>
         <button class="btn-icon-action del-btn" title="Hapus" onclick="event.stopPropagation(); hapusBarang(${item.id})">🗑️</button>
       `;
@@ -513,7 +493,7 @@ function getDriveDirectUrl(url) {
 
 function setGalleryLimit() {
   const isMobile = window.innerWidth <= 767;
-  AppState.galleryPagination.limit = isMobile ? 1 : 5; // 1 Untuk slide HP, 5 Untuk grid PC
+  AppState.galleryPagination.limit = isMobile ? 1 : 5; 
 }
 
 function renderGallery() {
@@ -576,53 +556,91 @@ function renderGallery() {
   });
 }
 
-window.openTransaksiModal = function (itemId, jenis) {
+// ---------------------------------------------------------
+// PERPISAHAN MODAL TRANSAKSI: MASUK DAN KELUAR
+// ---------------------------------------------------------
+window.openMasukModal = function (itemId) {
   const item = AppState.items.find((i) => i.id === itemId);
   if (!item) return;
   const sisa = item.masuk - item.keluar;
-  document.getElementById("transaksiItemId").value = item.id;
-  document.getElementById("transaksiNama").value = item.nama;
-  document.getElementById("transaksiSisaBadge").textContent = `${sisa} ${item.satuan}`;
-  document.getElementById("transaksiJumlah").value = "";
-  document.getElementById("transaksiKeterangan").value = "";
+  
+  document.getElementById("masukItemId").value = item.id;
+  document.getElementById("masukNama").value = item.nama;
+  document.getElementById("masukSisaBadge").textContent = `${sisa} ${item.satuan}`;
+  document.getElementById("masukJumlah").value = "";
+  document.getElementById("masukKeterangan").value = "";
 
-  document.getElementById(jenis === "KELUAR" ? "typeKeluar" : "typeMasuk").checked = true;
-  updateTransaksiHint(jenis); 
-  openModal("modalTransaksi");
-  setTimeout(() => document.getElementById("transaksiJumlah").focus(), 100);
+  openModal("modalMasuk");
+  setTimeout(() => document.getElementById("masukJumlah").focus(), 100);
 };
 
-function handleTransaksiSubmit(e) {
+function handleMasukSubmit(e) {
   e.preventDefault();
-  const id = parseInt(document.getElementById("transaksiItemId").value, 10);
-  const jenis = document.querySelector('input[name="transaksiJenis"]:checked').value;
-  const jumlah = parseInt(document.getElementById("transaksiJumlah").value, 10);
-  const keterangan = document.getElementById("transaksiKeterangan").value.trim() || "-";
-  const petugas = document.getElementById("transaksiPetugas").value.trim() || "Petugas";
+  const id = parseInt(document.getElementById("masukItemId").value, 10);
+  const jumlah = parseInt(document.getElementById("masukJumlah").value, 10);
+  const keterangan = document.getElementById("masukKeterangan").value.trim() || "-";
+  const petugas = document.getElementById("masukPetugas").value.trim() || "Petugas";
+  const item = AppState.items.find((i) => i.id === id);
+
+  if (!item || isNaN(jumlah) || jumlah <= 0) return showToast("Jumlah mutasi tidak valid!", "danger");
+
+  item.masuk += jumlah;
+  item.sisa = item.masuk - item.keluar;
+
+  const now = new Date().toLocaleString("id-ID");
+  AppState.logs.unshift({ timestamp: now, idBarang: item.id, namaBarang: item.nama, jenis: "MASUK", jumlah: jumlah, satuan: item.satuan, keterangan: keterangan, petugas: petugas });
+  
+  localStorage.setItem("satgas_local_logs", JSON.stringify(AppState.logs.slice(0, 50)));
+  saveLocalItems(); renderDashboard(); closeModal("modalMasuk");
+  showToast(`Barang Masuk berhasil dicatat!`, "success");
+
+  syncToGASBackground({ action: "transaksi", id: id, jenis: "MASUK", jumlah: jumlah, keterangan: keterangan, petugas: petugas, pin: sessionStorage.getItem("satgas_session_pin") || "" });
+}
+
+window.openKeluarModal = function (itemId) {
+  const item = AppState.items.find((i) => i.id === itemId);
+  if (!item) return;
+  const sisa = item.masuk - item.keluar;
+  
+  document.getElementById("keluarItemId").value = item.id;
+  document.getElementById("keluarNama").value = item.nama;
+  document.getElementById("keluarSisaBadge").textContent = `${sisa} ${item.satuan}`;
+  document.getElementById("keluarJumlah").value = "";
+  document.getElementById("keluarKeterangan").value = "";
+
+  openModal("modalKeluar");
+  setTimeout(() => document.getElementById("keluarJumlah").focus(), 100);
+};
+
+function handleKeluarSubmit(e) {
+  e.preventDefault();
+  const id = parseInt(document.getElementById("keluarItemId").value, 10);
+  const jumlah = parseInt(document.getElementById("keluarJumlah").value, 10);
+  const keterangan = document.getElementById("keluarKeterangan").value.trim() || "-";
+  const petugas = document.getElementById("keluarPetugas").value.trim() || "Petugas";
   const item = AppState.items.find((i) => i.id === id);
 
   if (!item || isNaN(jumlah) || jumlah <= 0) return showToast("Jumlah mutasi tidak valid!", "danger");
 
   const sisa = item.masuk - item.keluar;
-  if (jenis === "KELUAR" && jumlah > sisa) return showToast(`Stok tidak cukup! Sisa: ${sisa} ${item.satuan}`, "danger");
+  if (jumlah > sisa) return showToast(`Stok tidak cukup! Sisa: ${sisa} ${item.satuan}`, "danger");
 
-  if (jenis === "MASUK") item.masuk += jumlah; else item.keluar += jumlah;
+  item.keluar += jumlah;
   item.sisa = item.masuk - item.keluar;
 
   const now = new Date().toLocaleString("id-ID");
-  AppState.logs.unshift({ timestamp: now, idBarang: item.id, namaBarang: item.nama, jenis: jenis, jumlah: jumlah, satuan: item.satuan, keterangan: keterangan, petugas: petugas });
+  AppState.logs.unshift({ timestamp: now, idBarang: item.id, namaBarang: item.nama, jenis: "KELUAR", jumlah: jumlah, satuan: item.satuan, keterangan: keterangan, petugas: petugas });
   
   localStorage.setItem("satgas_local_logs", JSON.stringify(AppState.logs.slice(0, 50)));
-  saveLocalItems(); renderDashboard(); closeModal("modalTransaksi");
-  showToast(`Mutasi ${jenis} berhasil dicatat!`, "success");
+  saveLocalItems(); renderDashboard(); closeModal("modalKeluar");
+  showToast(`Barang Keluar berhasil dicatat!`, "success");
 
-  syncToGASBackground({ action: "transaksi", id: id, jenis: jenis, jumlah: jumlah, keterangan: keterangan, petugas: petugas, pin: sessionStorage.getItem("satgas_session_pin") || "" });
+  syncToGASBackground({ action: "transaksi", id: id, jenis: "KELUAR", jumlah: jumlah, keterangan: keterangan, petugas: petugas, pin: sessionStorage.getItem("satgas_session_pin") || "" });
 }
 
 function handleTambahBarangSubmit(e) {
   e.preventDefault();
   const nama = document.getElementById("tambahNama").value.trim();
-  // Validasi lapis ke-2: pastikan tidak ada angka atau spasi di awal/akhir
   const satuan = document.getElementById("tambahSatuan").value.replace(/[^a-zA-Z\s]/g, '').trim();
   const stokAwal = parseInt(document.getElementById("tambahStokAwal").value, 10) || 0;
   const keterangan = document.getElementById("tambahKeterangan").value.trim() || "Barang baru";
@@ -654,7 +672,6 @@ function handleEditSubmit(e) {
   e.preventDefault();
   const id = parseInt(document.getElementById("editId").value, 10);
   const nama = document.getElementById("editNama").value.trim();
-  // Validasi lapis ke-2
   const satuan = document.getElementById("editSatuan").value.replace(/[^a-zA-Z\s]/g, '').trim();
   const masuk = parseInt(document.getElementById("editMasuk").value, 10);
   const keluar = parseInt(document.getElementById("editKeluar").value, 10);
