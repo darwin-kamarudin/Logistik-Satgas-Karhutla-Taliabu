@@ -1,6 +1,6 @@
 /**
  * APP.JS - SISTEM LOGISTIK SATGAS KARHUTLA KAB. PULAU TALIABU
- * Update: Background Sync, Optimistic UI, Pagination, Mobile Action, & Input Validations
+ * Update: Dynamic Row Numbering, Background Sync, Optimistic UI, Pagination, Mobile Action, & Input Validations
  */
 
 const DEFAULT_INVENTORY = [
@@ -94,7 +94,6 @@ function initApp() {
   }
 }
 
-// Fungsi Bantuan Keterangan Dinamis Masuk/Keluar
 function updateTransaksiHint(jenis) {
   const hintBox = document.getElementById("transaksiHint");
   if (jenis === "KELUAR") {
@@ -111,14 +110,12 @@ function updateTransaksiHint(jenis) {
 }
 
 function setupEventListeners() {
-  // Blok input angka untuk field SATUAN secara real-time
   const stripNumbers = function (e) {
     this.value = this.value.replace(/[0-9]/g, '');
   };
   document.getElementById("tambahSatuan").addEventListener("input", stripNumbers);
   document.getElementById("editSatuan").addEventListener("input", stripNumbers);
 
-  // Ubah keterangan saat radio button transaksi berubah
   document.querySelectorAll('input[name="transaksiJenis"]').forEach(radio => {
     radio.addEventListener('change', function(e) {
       updateTransaksiHint(e.target.value);
@@ -339,7 +336,7 @@ async function sendActionToGAS(payload) {
   } catch (err) {
     console.warn("Fetch POST gagal, mencoba URL params fallback...", err);
     try {
-      const params = new URLSearchParams(payload).toString();
+      const params = newSearchParams(payload).toString();
       const resFallback = await fetch(AppState.gasUrl + "?" + params);
       return await resFallback.json();
     } catch (fallbackErr) {
@@ -437,9 +434,14 @@ function renderTable() {
 
   emptyState.style.display = totalItems === 0 ? "block" : "none";
 
-  paginatedItems.forEach(function (item) {
+  // Perubahan parameter: tambahkan 'index' pada forEach
+  paginatedItems.forEach(function (item, index) {
     const tr = document.createElement("tr");
     const sisa = item.masuk - item.keluar;
+    
+    // Perhitungan nomor urut dinamis
+    const rowNumber = startIndex + index + 1;
+    
     if (sisa <= 0) tr.classList.add("highlight-empty");
 
     let statusBadge = sisa <= 0 ? '<span class="badge badge-danger">Habis</span>' :
@@ -476,7 +478,7 @@ function renderTable() {
     }
 
     tr.innerHTML = `
-      <td class="col-num">${item.id}</td>
+      <td class="col-num">${rowNumber}</td> <!-- Menerapkan nomor urut dinamis -->
       <td class="col-name" ${nameCellAttrs}>
         <div style="display:flex; align-items:center; justify-content:space-between; width:100%;">
           <span>${escapeHtml(item.nama)}</span>
@@ -507,7 +509,7 @@ window.openTransaksiModal = function (itemId, jenis) {
   document.getElementById("transaksiKeterangan").value = "";
 
   document.getElementById(jenis === "KELUAR" ? "typeKeluar" : "typeMasuk").checked = true;
-  updateTransaksiHint(jenis); // Tampilkan keterangan pertama kali dibuka
+  updateTransaksiHint(jenis); 
   openModal("modalTransaksi");
   setTimeout(() => document.getElementById("transaksiJumlah").focus(), 100);
 };
@@ -532,7 +534,7 @@ function handleTransaksiSubmit(e) {
     return;
   }
 
-  // 1. Pembaruan Lokal Optimis (Optimistic Update)
+  // 1. Pembaruan Lokal Optimis
   if (jenis === "MASUK") item.masuk += jumlah;
   else item.keluar += jumlah;
   item.sisa = item.masuk - item.keluar;
@@ -704,8 +706,10 @@ function populateSatuanFilter() {
 function exportToCSV() {
   if (AppState.items.length === 0) return showToast("Tidak ada data untuk diekspor!", "warning");
   const headers = ["No", "Nama Barang", "Masuk", "Keluar", "Persediaan di Gudang", "Satuan", "Status"];
-  const rows = AppState.items.map((it) => [
-    it.id, `"${it.nama.replace(/"/g, '""')}"`, it.masuk, it.keluar, it.masuk - it.keluar,
+  
+  // Menggunakan index berurutan juga untuk output CSV
+  const rows = AppState.items.map((it, index) => [
+    index + 1, `"${it.nama.replace(/"/g, '""')}"`, it.masuk, it.keluar, it.masuk - it.keluar,
     `"${it.satuan}"`, it.masuk - it.keluar <= 0 ? "Habis" : (it.masuk - it.keluar <= 5 ? "Menipis" : "Tersedia")
   ]);
   const csvContent = "\uFEFF" + [headers.join(","), ...rows.map((r) => r.join(","))].join("\r\n");
